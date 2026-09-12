@@ -207,3 +207,83 @@ make serve
 # Start with a specific scan directory
 make run-dir DIR=/data/fits
 ```
+
+---
+
+## Phase 3 — User & Role Management API
+
+### Roles
+
+| Role | Can view data | Can edit FITS metadata | Can manage users |
+|---|---|---|---|
+| `viewer` | ✅ | ❌ | ❌ |
+| `editor` | ✅ | ✅ | ❌ |
+| `admin`  | ✅ | ✅ | ✅ |
+
+### User endpoints
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/api/users/me` | Any role | Own profile |
+| `PUT` | `/api/users/me/password` | Any role | Change own password |
+| `GET` | `/api/users` | Admin | List users (paginated + search) |
+| `POST` | `/api/users` | Admin | Create user |
+| `GET` | `/api/users/{id}` | Admin | Get user by ID |
+| `PUT` | `/api/users/{id}` | Admin | Edit name, role, active status |
+| `DELETE` | `/api/users/{id}` | Admin | Delete user |
+| `PUT` | `/api/users/{id}/password` | Admin | Reset any user's password |
+
+### Query params for `GET /api/users`
+
+| Param | Example | Description |
+|---|---|---|
+| `page` | `1` | Page number |
+| `page_size` | `20` | Items per page (max 100) |
+| `search` | `reza` | Partial match on email or name |
+| `role` | `editor` | Filter by role |
+| `active` | `true` | Filter active/inactive |
+
+### Examples
+
+```bash
+# List all users
+curl -H "Authorization: Bearer TOKEN" http://localhost:8080/api/users
+
+# Search users
+curl -H "Authorization: Bearer TOKEN" \
+  "http://localhost:8080/api/users?search=reza&role=editor&page=1&page_size=10"
+
+# Create a new editor
+curl -X POST http://localhost:8080/api/users \
+  -H "Authorization: Bearer TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"reza@fits.local","password":"Secret@123","full_name":"Reza","role":"editor"}'
+
+# Edit user role
+curl -X PUT http://localhost:8080/api/users/2 \
+  -H "Authorization: Bearer TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"full_name":"Reza Updated","role":"viewer","is_active":true}'
+
+# Change own password
+curl -X PUT http://localhost:8080/api/users/me/password \
+  -H "Authorization: Bearer TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"old_password":"Admin@1234","new_password":"NewPass@456"}'
+
+# Admin reset another user password
+curl -X PUT http://localhost:8080/api/users/2/password \
+  -H "Authorization: Bearer TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"new_password":"Reset@789"}'
+
+# Delete user
+curl -X DELETE http://localhost:8080/api/users/2 \
+  -H "Authorization: Bearer TOKEN"
+```
+
+### Safety rules
+- You cannot delete your own account
+- You cannot delete or demote the last active admin
+- Passwords must be at least 8 characters
+- Emails must be unique across the system
