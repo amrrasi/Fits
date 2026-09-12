@@ -1,0 +1,26 @@
+# Compiled binaries
+/bin/
+/dist/
+fits-processor
+
+# Environment secrets — copy .env.example → .env and fill in
+.env
+
+# Log files (generated at runtime)
+logs/
+
+# Go tool cache
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# macOS
+.DS_Store
+
+# Test FITS files with real data (add your own)
+testdata/*.fits
+testdata/*.fit
+testdata/*.fts
