@@ -25,6 +25,17 @@ type Config struct {
 
 	// Application
 	App AppConfig
+
+	// JWT / Auth
+	JWT JWTConfig
+}
+
+// JWTConfig holds signing secrets and token lifetimes.
+type JWTConfig struct {
+	AccessSecret  string        // JWT_ACCESS_SECRET  — min 32 chars in production
+	RefreshSecret string        // JWT_REFRESH_SECRET — min 32 chars in production
+	AccessTTL     time.Duration // JWT_ACCESS_TTL     — default 15m
+	RefreshTTL    time.Duration // JWT_REFRESH_TTL    — default 168h (7d)
 }
 
 // DBConfig holds PostgreSQL connection parameters.
@@ -117,6 +128,14 @@ func Load(envFile string) (*Config, error) {
 		ScanDir:   getEnv("FITS_SCAN_DIR", "./testdata"),
 		Workers:   getEnvInt("FITS_WORKERS", 4),
 		BatchSize: getEnvInt("FITS_BATCH_SIZE", 100),
+	}
+
+	// ── JWT ───────────────────────────────────────────────────────────────────
+	cfg.JWT = JWTConfig{
+		AccessSecret:  getEnv("JWT_ACCESS_SECRET", "change-me-access-secret-32chars!!"),
+		RefreshSecret: getEnv("JWT_REFRESH_SECRET", "change-me-refresh-secret-32chars!"),
+		AccessTTL:     getEnvDuration("JWT_ACCESS_TTL", 15*time.Minute),
+		RefreshTTL:    getEnvDuration("JWT_REFRESH_TTL", 7*24*time.Hour),
 	}
 
 	// ── Application ───────────────────────────────────────────────────────────

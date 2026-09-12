@@ -13,6 +13,10 @@ build:
 run: build
 	./bin/$(BINARY) --env $(ENV_FILE)
 
+## serve: start HTTP API server only (no scan)
+serve: build
+	./bin/$(BINARY) --env $(ENV_FILE) --serve-only
+
 ## run-dir: scan a specific directory (make run-dir DIR=/path/to/fits)
 run-dir: build
 	./bin/$(BINARY) --env $(ENV_FILE) --scan-dir $(DIR)

@@ -130,3 +130,80 @@ Migrations are applied automatically on every startup.
 | `logs/fits-processor-YYYY-MM-DD.error.log` | Errors only — JSON |
 
 Console output is human-readable. Set `LOG_LEVEL=debug` for per-keyword detail.
+
+---
+
+## Phase 2 — Authentication & User System
+
+### Default admin account
+
+| Field | Value |
+|---|---|
+| Email | `admin@fits.local` |
+| Password | `Admin@1234` |
+| Role | `admin` |
+
+**Change the password immediately after first login.**
+
+### Auth endpoints
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `POST` | `/api/auth/login` | Public | Returns access + refresh token |
+| `POST` | `/api/auth/logout` | Public | Revokes refresh token |
+| `POST` | `/api/auth/refresh` | Public | Issues new token pair (rotates refresh token) |
+| `GET` | `/health` | Public | Health check |
+| `GET` | `/api/me` | Bearer token | Returns current user info |
+
+### Login example
+
+```bash
+curl -s -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@fits.local","password":"Admin@1234"}' | jq
+```
+
+Response:
+```json
+{
+  "access_token": "eyJ...",
+  "refresh_token": "550e8400-...",
+  "expires_at": "2026-01-01T00:15:00Z",
+  "user": { "id": 1, "email": "admin@fits.local", "role": "admin" }
+}
+```
+
+### Using the access token
+
+```bash
+curl -H "Authorization: Bearer eyJ..." http://localhost:8080/api/me
+```
+
+### Token lifecycle
+
+- **Access token** — short-lived (15 min), stateless JWT, validated on every request
+- **Refresh token** — long-lived (7 days), stored as SHA-256 hash in `sessions` table
+- **Refresh rotation** — every refresh call deletes the old session and issues a new pair
+
+### JWT environment variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `JWT_ACCESS_SECRET` | _(insecure default)_ | HMAC signing key for access tokens |
+| `JWT_REFRESH_SECRET` | _(insecure default)_ | HMAC signing key for refresh tokens |
+| `JWT_ACCESS_TTL` | `15m` | Access token lifetime |
+| `JWT_REFRESH_TTL` | `168h` | Refresh token lifetime (7 days) |
+| `SERVER_ADDR` | `:8080` | HTTP listen address |
+
+### Running the server
+
+```bash
+# Start HTTP server + run a FITS scan on startup
+make run
+
+# Start HTTP server only (no scan)
+make serve
+
+# Start with a specific scan directory
+make run-dir DIR=/data/fits
+```
