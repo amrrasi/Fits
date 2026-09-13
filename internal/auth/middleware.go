@@ -9,14 +9,10 @@ import (
 	"github.com/amrrasi/fits/internal/models"
 )
 
-// contextKey is an unexported type for context keys in this package.
 type contextKey string
 
 const claimsKey contextKey = "claims"
 
-// Middleware returns an HTTP middleware that validates the Bearer token
-// and injects the parsed Claims into the request context.
-// Returns 401 if the token is missing or invalid.
 func Middleware(ts *TokenService) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -28,8 +24,8 @@ func Middleware(ts *TokenService) func(http.Handler) http.Handler {
 
 			claims, err := ts.ValidateAccessToken(tokenStr)
 			if err != nil {
-				logger.S().Debugw("auth: token validation failed", "err", err, "path", r.URL.Path)
-				writeUnauthorized(w, "invalid or expired token")
+				logger.S().Debugw("توکن احراز ناموفق بود", "err", err, "path", r.URL.Path)
+				writeUnauthorized(w, "توکن نامعتبر یا باطل شده است.")
 				return
 			}
 
@@ -39,8 +35,6 @@ func Middleware(ts *TokenService) func(http.Handler) http.Handler {
 	}
 }
 
-// RequireRole returns middleware that ensures the caller has at least the given role.
-// Must be chained after Middleware.
 func RequireRole(roles ...models.Role) func(http.Handler) http.Handler {
 	allowed := make(map[models.Role]bool, len(roles))
 	for _, r := range roles {
@@ -50,11 +44,11 @@ func RequireRole(roles ...models.Role) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			claims := ClaimsFromContext(r.Context())
 			if claims == nil {
-				writeUnauthorized(w, "not authenticated")
+				writeUnauthorized(w, "متاسفانه احراز هویت نشدید")
 				return
 			}
 			if !allowed[claims.Role] {
-				writeForbidden(w, "insufficient permissions")
+				writeForbidden(w, "پژوهشگر عزیز: متاسفانه نقش کاربری شما دسترسی کافی برای این عمل را ندارد")
 				return
 			}
 			next.ServeHTTP(w, r)
@@ -62,14 +56,10 @@ func RequireRole(roles ...models.Role) func(http.Handler) http.Handler {
 	}
 }
 
-// ClaimsFromContext retrieves the JWT claims injected by Middleware.
-// Returns nil if not present (unauthenticated request).
 func ClaimsFromContext(ctx context.Context) *Claims {
 	c, _ := ctx.Value(claimsKey).(*Claims)
 	return c
 }
-
-// ── helpers ───────────────────────────────────────────────────────────────────
 
 func extractBearer(r *http.Request) string {
 	header := r.Header.Get("Authorization")
