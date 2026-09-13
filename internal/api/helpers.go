@@ -34,35 +34,28 @@ type PagedResponse struct {
 	TotalPages int         `json:"total_pages"`
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Writers
-// ─────────────────────────────────────────────────────────────────────────────
 
-// WriteJSON encodes body as JSON and writes the given status code.
 func WriteJSON(w http.ResponseWriter, status int, body interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(body); err != nil {
-		logger.S().Warnw("api: write json failed", "err", err)
+		logger.S().Warnw("خطا در نوشتن فایل Json!", "err", err)
 	}
 }
 
-// WriteOK writes a 200 response with data wrapped in the standard envelope.
 func WriteOK(w http.ResponseWriter, data interface{}) {
 	WriteJSON(w, http.StatusOK, Response{Data: data})
 }
 
-// WriteCreated writes a 201 response.
 func WriteCreated(w http.ResponseWriter, data interface{}) {
 	WriteJSON(w, http.StatusCreated, Response{Data: data})
 }
 
-// WriteNoContent writes 204 with no body.
 func WriteNoContent(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// WritePaged writes a paginated list response.
 func WritePaged(w http.ResponseWriter, data interface{}, total, page, pageSize int) {
 	totalPages := 0
 	if pageSize > 0 {
@@ -77,9 +70,7 @@ func WritePaged(w http.ResponseWriter, data interface{}, total, page, pageSize i
 	})
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Error writers
-// ─────────────────────────────────────────────────────────────────────────────
 
 func WriteBadRequest(w http.ResponseWriter, msg string) {
 	WriteJSON(w, http.StatusBadRequest, ErrorResponse{Error: msg, Code: 400})
@@ -103,12 +94,10 @@ func WriteConflict(w http.ResponseWriter, msg string) {
 
 func WriteInternalError(w http.ResponseWriter, err error) {
 	logger.S().Errorw("api: internal error", "err", err)
-	WriteJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "internal server error", Code: 500})
+	WriteJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "مشکلی در سرور داخلی پیش آمده", Code: 500})
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Request parsing helpers
-// ─────────────────────────────────────────────────────────────────────────────
 
 // DecodeJSON reads and decodes a JSON request body into dst.
 // Returns false and writes a 400 response if decoding fails.
@@ -129,10 +118,10 @@ func PathID(r *http.Request, name string) (int64, error) {
 	}
 	id, err := strconv.ParseInt(raw, 10, 64)
 	if err != nil {
-		return 0, fmt.Errorf("invalid %s: must be an integer", name)
+		return 0, fmt.Errorf("نامعتبر %s: حتما باید به صورت عدد صحیح باشد", name)
 	}
 	if id < 1 {
-		return 0, fmt.Errorf("invalid %s: must be positive", name)
+		return 0, fmt.Errorf("نامعتبر %s: حتما باید مثبت باشد", name)
 	}
 	return id, nil
 }
@@ -163,7 +152,7 @@ func Pagination(r *http.Request) (page, pageSize, offset int) {
 	page = QueryInt(r, "page", 1)
 	pageSize = QueryInt(r, "page_size", 20)
 	if pageSize > 100 {
-		pageSize = 100 // hard cap
+		pageSize = 100
 	}
 	offset = (page - 1) * pageSize
 	return
