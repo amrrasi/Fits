@@ -1,6 +1,3 @@
-// Package config loads application configuration from environment variables
-// (or a .env file via godotenv). All external settings live here so that
-// you only need to change env vars — not code — when deploying.
 package config
 
 import (
@@ -12,33 +9,21 @@ import (
 	"github.com/joho/godotenv"
 )
 
-// Config holds all application settings.
 type Config struct {
-	// Database connection
-	DB DBConfig
-
-	// Logging
-	Log LogConfig
-
-	// FITS processing
+	DB   DBConfig
+	Log  LogConfig
 	FITS FITSConfig
-
-	// Application
-	App AppConfig
-
-	// JWT / Auth
-	JWT JWTConfig
+	App  AppConfig
+	JWT  JWTConfig
 }
 
-// JWTConfig holds signing secrets and token lifetimes.
 type JWTConfig struct {
-	AccessSecret  string        // JWT_ACCESS_SECRET  — min 32 chars in production
-	RefreshSecret string        // JWT_REFRESH_SECRET — min 32 chars in production
-	AccessTTL     time.Duration // JWT_ACCESS_TTL     — default 15m
-	RefreshTTL    time.Duration // JWT_REFRESH_TTL    — default 168h (7d)
+	AccessSecret  string
+	RefreshSecret string
+	AccessTTL     time.Duration
+	RefreshTTL    time.Duration
 }
 
-// DBConfig holds PostgreSQL connection parameters.
 type DBConfig struct {
 	Host     string
 	Port     int
@@ -47,13 +32,11 @@ type DBConfig struct {
 	Name     string
 	SSLMode  string
 
-	// Connection pool settings
 	MaxOpenConns    int
 	MaxIdleConns    int
 	ConnMaxLifetime time.Duration
 }
 
-// DSN returns a PostgreSQL connection string (DSN).
 func (d DBConfig) DSN() string {
 	return fmt.Sprintf(
 		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
@@ -61,7 +44,6 @@ func (d DBConfig) DSN() string {
 	)
 }
 
-// PgxDSN returns a pgx-compatible URL.
 func (d DBConfig) PgxDSN() string {
 	return fmt.Sprintf(
 		"postgres://%s:%s@%s:%d/%s?sslmode=%s",
@@ -69,41 +51,31 @@ func (d DBConfig) PgxDSN() string {
 	)
 }
 
-// LogConfig controls the logger.
 type LogConfig struct {
-	Level       string // debug | info | warn | error
-	Dir         string // directory for log files
-	Development bool   // adds caller+stacktrace
+	Level       string
+	Dir         string
+	Development bool
 }
 
-// FITSConfig controls FITS file processing behaviour.
 type FITSConfig struct {
-	// ScanDir is the root directory to scan for .fits / .fit files.
-	ScanDir string
-	// Workers is the number of concurrent goroutines processing files.
-	Workers int
-	// BatchSize is how many header rows to insert per DB transaction.
+	ScanDir   string
+	Workers   int
 	BatchSize int
 }
 
-// AppConfig holds general application settings.
 type AppConfig struct {
-	Name        string
-	Environment string // development | staging | production
+	Name          string
+	Environment   string
 	MigrationsDir string
 }
 
-// Load reads configuration from environment (and optional .env file).
-// envFile may be empty to skip loading a file.
 func Load(envFile string) (*Config, error) {
 	if envFile != "" {
-		// Best-effort: ignore "file not found" so production (env vars only) works fine.
 		_ = godotenv.Load(envFile)
 	}
 
 	cfg := &Config{}
 
-	// ── Database ──────────────────────────────────────────────────────────────
 	cfg.DB = DBConfig{
 		Host:            getEnv("DB_HOST", "localhost"),
 		Port:            getEnvInt("DB_PORT", 5432),
@@ -116,21 +88,18 @@ func Load(envFile string) (*Config, error) {
 		ConnMaxLifetime: getEnvDuration("DB_CONN_MAX_LIFETIME", 5*time.Minute),
 	}
 
-	// ── Logging ───────────────────────────────────────────────────────────────
 	cfg.Log = LogConfig{
 		Level:       getEnv("LOG_LEVEL", "info"),
 		Dir:         getEnv("LOG_DIR", "logs"),
 		Development: getEnvBool("LOG_DEVELOPMENT", false),
 	}
 
-	// ── FITS processing ───────────────────────────────────────────────────────
 	cfg.FITS = FITSConfig{
 		ScanDir:   getEnv("FITS_SCAN_DIR", "./testdata"),
 		Workers:   getEnvInt("FITS_WORKERS", 4),
 		BatchSize: getEnvInt("FITS_BATCH_SIZE", 100),
 	}
 
-	// ── JWT ───────────────────────────────────────────────────────────────────
 	cfg.JWT = JWTConfig{
 		AccessSecret:  getEnv("JWT_ACCESS_SECRET", "change-me-access-secret-32chars!!"),
 		RefreshSecret: getEnv("JWT_REFRESH_SECRET", "change-me-refresh-secret-32chars!"),
@@ -138,7 +107,6 @@ func Load(envFile string) (*Config, error) {
 		RefreshTTL:    getEnvDuration("JWT_REFRESH_TTL", 7*24*time.Hour),
 	}
 
-	// ── Application ───────────────────────────────────────────────────────────
 	cfg.App = AppConfig{
 		Name:          getEnv("APP_NAME", "fits-processor"),
 		Environment:   getEnv("APP_ENV", "development"),
@@ -164,8 +132,6 @@ func (c *Config) validate() error {
 	}
 	return nil
 }
-
-// ── helpers ───────────────────────────────────────────────────────────────────
 
 func getEnv(key, fallback string) string {
 	if v, ok := os.LookupEnv(key); ok {
