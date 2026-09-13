@@ -8,25 +8,19 @@ import (
 	"github.com/amrrasi/fits/internal/logger"
 )
 
-// Handler exposes auth HTTP endpoints.
 type Handler struct {
 	svc *Service
 }
 
-// NewHandler creates an auth Handler.
 func NewHandler(svc *Service) *Handler {
 	return &Handler{svc: svc}
 }
 
-// RegisterRoutes wires auth endpoints onto a ServeMux.
-// Prefix should be "/api/auth".
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/auth/login", h.Login)
 	mux.HandleFunc("POST /api/auth/logout", h.Logout)
 	mux.HandleFunc("POST /api/auth/refresh", h.Refresh)
 }
-
-// ── POST /api/auth/login ──────────────────────────────────────────────────────
 
 type loginRequest struct {
 	Email    string `json:"email"`
@@ -68,8 +62,6 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, pair)
 }
 
-// ── POST /api/auth/logout ─────────────────────────────────────────────────────
-
 type logoutRequest struct {
 	RefreshToken string `json:"refresh_token"`
 }
@@ -99,8 +91,6 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	_ = h.svc.Logout(r.Context(), req.RefreshToken)
 	writeJSON(w, http.StatusOK, map[string]string{"message": "logged out"})
 }
-
-// ── POST /api/auth/refresh ────────────────────────────────────────────────────
 
 type refreshRequest struct {
 	RefreshToken string `json:"refresh_token"`
@@ -136,8 +126,6 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, pair)
 }
-
-// ── shared helpers ────────────────────────────────────────────────────────────
 
 type errorResponse struct {
 	Error string `json:"error"`
