@@ -1,4 +1,3 @@
-// Package api contains shared HTTP utilities used across all handler packages.
 package api
 
 import (
