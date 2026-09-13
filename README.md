@@ -287,3 +287,86 @@ curl -X DELETE http://localhost:8080/api/users/2 \
 - You cannot delete or demote the last active admin
 - Passwords must be at least 8 characters
 - Emails must be unique across the system
+
+---
+
+## Phase 4 — FITS Data REST API
+
+### All endpoints
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/health` | Public | Liveness check |
+| `GET` | `/ready` | Public | Readiness check |
+| `GET` | `/api/files` | Any role | List FITS files (paginated + filters) |
+| `GET` | `/api/files/{id}` | Any role | Single file detail |
+| `DELETE` | `/api/files/{id}` | Admin | Delete file and all related data |
+| `GET` | `/api/files/{id}/headers` | Any role | Paginated raw headers (EAV) |
+| `GET` | `/api/files/{id}/metadata` | Any role | Typed metadata |
+| `PUT` | `/api/files/{id}/metadata` | Editor/Admin | Edit one metadata field |
+| `GET` | `/api/files/{id}/metadata/history` | Any role | Full edit history |
+| `GET` | `/api/jobs` | Any role | List processing jobs |
+| `GET` | `/api/jobs/{id}` | Any role | Job detail |
+| `GET` | `/api/jobs/{id}/errors` | Any role | Errors for a job |
+| `GET` | `/api/jobs/{id}/status` | Any role | Lightweight status poll |
+| `POST` | `/api/scan` | Admin | Trigger a new scan |
+
+### Query params for `GET /api/files`
+
+| Param | Example | Description |
+|---|---|---|
+| `page` | `1` | Page number |
+| `page_size` | `20` | Items per page (max 100) |
+| `search` | `m31` | Partial match on file name |
+| `status` | `done` | `pending/processing/done/error/skipped` |
+| `sort` | `file_size` | `created_at/file_name/file_size/processed_at` |
+| `order` | `asc` | `asc` or `desc` |
+| `date_from` | `2024-01-01` | Created at or after (YYYY-MM-DD) |
+| `date_to` | `2024-12-31` | Created at or before (YYYY-MM-DD) |
+
+### Query params for `GET /api/files/{id}/headers`
+
+| Param | Example | Description |
+|---|---|---|
+| `page` | `1` | Page number |
+| `page_size` | `100` | Items per page |
+| `search` | `exptime` | Partial match on keyword or value |
+| `hdu_index` | `0` | Filter to one HDU |
+
+### Edit metadata example
+
+```bash
+curl -X PUT http://localhost:8080/api/files/1/metadata \
+  -H "Authorization: Bearer TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "field_name": "object",
+    "new_value": "M31 Andromeda",
+    "reason": "correcting object name from original header"
+  }'
+```
+
+Editable fields: `object`, `observer`, `telescop`, `instrume`, `filter`, `filter_id`, `origin`, `software`, `equip_id`, `ra`, `dec`, `airmass`, `site_lat`, `site_lon`, `site_elev`, `exptime`, `gain`, `rdnoise`, `set_temp`, `ccd_temp`, `amb_temp`, `date_obs`, `time_obs`
+
+Raw `fits_headers` are **never modified** — every edit is recorded in `metadata_overrides` with the old value, new value, editor, and optional reason.
+
+### Trigger a scan
+
+```bash
+curl -X POST http://localhost:8080/api/scan \
+  -H "Authorization: Bearer TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"scan_dir": "/data/fits"}'
+```
+
+Returns `{"job_id": 42, "scan_dir": "/data/fits", "message": "scan started"}` immediately. Poll `GET /api/jobs/42/status` for progress.
+
+### Architecture improvements in Phase 4
+
+- Repository split: `FileRepository`, `HeaderRepository`, `MetadataRepository`, `JobRepository`
+- Every file ingestion wrapped in a single PostgreSQL transaction — no partial data on failure
+- Job status expanded: `completed | partially_failed | failed | cancelled`
+- `processing_ms` recorded per file and per job
+- `metadata_overrides` table — full audit trail of every metadata edit
+- `audit_logs` table — system-wide audit log for all actions
+- Partial indexes and composite indexes for common query patterns

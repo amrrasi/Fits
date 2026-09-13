@@ -147,9 +147,11 @@ type ProcessingJob struct {
 type JobStatus string
 
 const (
-	JobStatusRunning   JobStatus = "running"
-	JobStatusCompleted JobStatus = "completed"
-	JobStatusFailed    JobStatus = "failed"
+	JobStatusRunning         JobStatus = "running"
+	JobStatusCompleted       JobStatus = "completed"
+	JobStatusPartiallyFailed JobStatus = "partially_failed"
+	JobStatusFailed          JobStatus = "failed"
+	JobStatusCancelled       JobStatus = "cancelled"
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
