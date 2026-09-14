@@ -9,6 +9,7 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/zap"
 
 	"github.com/amrrasi/fits/internal/config"
 	"github.com/amrrasi/fits/internal/logger"
@@ -42,13 +43,12 @@ func Connect(ctx context.Context, cfg config.DBConfig) (*DB, error) {
 		return nil, fmt.Errorf("database: ping failed: %w", err)
 	}
 
-	logger.L().Info("database: connected to PostgreSQL",
-		logger.L().Sugar().With(
-			"host", cfg.Host,
-			"port", cfg.Port,
-			"database", cfg.Name,
-			"max_conns", cfg.MaxOpenConns,
-		),
+	logger.L().Info(
+		"database: connected to PostgreSQL",
+		zap.String("host", cfg.Host),
+		zap.Int("port", cfg.Port),
+		zap.String("database", cfg.Name),
+		zap.Int("max_conns", cfg.MaxOpenConns),
 	)
 
 	return &DB{Pool: pool}, nil
@@ -71,10 +71,17 @@ func Migrate(databaseURL, migrationsDir string) error {
 	defer func() {
 		srcErr, dbErr := m.Close()
 		if srcErr != nil {
-			logger.L().Error("database: migrate close source error", logger.L().Sugar().With("err", srcErr))
+			logger.L().Error(
+				"database: migrate close source error",
+				zap.Error(srcErr),
+			)
 		}
+
 		if dbErr != nil {
-			logger.L().Error("database: migrate close db error", logger.L().Sugar().With("err", dbErr))
+			logger.L().Error(
+				"database: migrate close db error",
+				zap.Error(dbErr),
+			)
 		}
 	}()
 
