@@ -18,68 +18,63 @@ import (
 // Handler exposes FITS data endpoints.
 type Handler struct {
 	svc     *fitsservice.Service
-	scanDir string // default scan directory from config
+	scanDir string              // default scan directory from config
+	runFn   func(jobID int64)   // injected by main via SetRunFn
 }
 
 // New creates a Handler.
 func New(svc *fitsservice.Service, scanDir string) *Handler {
-	return &Handler{svc: svc, scanDir: scanDir}
+	return &Handler{
+		svc:     svc,
+		scanDir: scanDir,
+		runFn:   func(_ int64) {}, // safe no-op default
+	}
+}
+
+// SetRunFn injects the actual processor run function.
+// Call this from main after both handler and processor are initialised.
+func (h *Handler) SetRunFn(fn func(jobID int64)) {
+	h.runFn = fn
 }
 
 // RegisterRoutes wires all endpoints onto mux.
-// authMW   — Bearer token required
-// editorMW — admin or editor role required
-// adminMW  — admin role required
 func (h *Handler) RegisterRoutes(
 	mux *http.ServeMux,
 	authMW func(http.Handler) http.Handler,
 	editorMW func(http.Handler) http.Handler,
 	adminMW func(http.Handler) http.Handler,
 ) {
-	// ── Files ─────────────────────────────────────────────────────────────────
-	mux.Handle("GET /api/files",
-		authMW(http.HandlerFunc(h.ListFiles)))
-	mux.Handle("GET /api/files/{id}",
-		authMW(http.HandlerFunc(h.GetFile)))
-	mux.Handle("DELETE /api/files/{id}",
-		authMW(adminMW(http.HandlerFunc(h.DeleteFile))))
+	// Files
+	mux.Handle("GET /api/files",           authMW(http.HandlerFunc(h.ListFiles)))
+	mux.Handle("GET /api/files/{id}",      authMW(http.HandlerFunc(h.GetFile)))
+	mux.Handle("DELETE /api/files/{id}",   authMW(adminMW(http.HandlerFunc(h.DeleteFile))))
 
-	// ── Headers ───────────────────────────────────────────────────────────────
-	mux.Handle("GET /api/files/{id}/headers",
-		authMW(http.HandlerFunc(h.ListHeaders)))
+	// Headers
+	mux.Handle("GET /api/files/{id}/headers", authMW(http.HandlerFunc(h.ListHeaders)))
 
-	// ── Metadata ──────────────────────────────────────────────────────────────
-	mux.Handle("GET /api/files/{id}/metadata",
-		authMW(http.HandlerFunc(h.GetMetadata)))
-	mux.Handle("PUT /api/files/{id}/metadata",
-		authMW(editorMW(http.HandlerFunc(h.EditMetadata))))
-	mux.Handle("GET /api/files/{id}/metadata/history",
-		authMW(http.HandlerFunc(h.GetMetadataHistory)))
+	// Metadata
+	mux.Handle("GET /api/files/{id}/metadata",         authMW(http.HandlerFunc(h.GetMetadata)))
+	mux.Handle("PUT /api/files/{id}/metadata",         authMW(editorMW(http.HandlerFunc(h.EditMetadata))))
+	mux.Handle("GET /api/files/{id}/metadata/history", authMW(http.HandlerFunc(h.GetMetadataHistory)))
 
-	// ── Jobs ──────────────────────────────────────────────────────────────────
-	mux.Handle("GET /api/jobs",
-		authMW(http.HandlerFunc(h.ListJobs)))
-	mux.Handle("GET /api/jobs/{id}",
-		authMW(http.HandlerFunc(h.GetJob)))
-	mux.Handle("GET /api/jobs/{id}/errors",
-		authMW(http.HandlerFunc(h.GetJobErrors)))
-	mux.Handle("GET /api/jobs/{id}/status",
-		authMW(http.HandlerFunc(h.GetJobStatus)))
+	// Jobs
+	mux.Handle("GET /api/jobs",            authMW(http.HandlerFunc(h.ListJobs)))
+	mux.Handle("GET /api/jobs/{id}",       authMW(http.HandlerFunc(h.GetJob)))
+	mux.Handle("GET /api/jobs/{id}/errors", authMW(http.HandlerFunc(h.GetJobErrors)))
+	mux.Handle("GET /api/jobs/{id}/status", authMW(http.HandlerFunc(h.GetJobStatus)))
 
-	// ── Scan trigger ──────────────────────────────────────────────────────────
-	mux.Handle("POST /api/scan",
-		authMW(adminMW(http.HandlerFunc(h.TriggerScan))))
+	// Scan trigger (admin only)
+	mux.Handle("POST /api/scan", authMW(adminMW(http.HandlerFunc(h.TriggerScan))))
 
-	// ── Readiness ─────────────────────────────────────────────────────────────
+	// Stats (dashboard)
+	mux.Handle("GET /api/stats", authMW(http.HandlerFunc(h.Stats)))
+
+	// Readiness
 	mux.HandleFunc("GET /ready", h.Ready)
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/files
-// ─────────────────────────────────────────────────────────────────────────────
+// ── GET /api/files ────────────────────────────────────────────────────────────
 
-// ListFiles godoc
-// Query params: page, page_size, search, status, sort, order, date_from, date_to
 func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
 	page, pageSize, _ := api.Pagination(r)
 
@@ -90,7 +85,6 @@ func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
 		Page:      page,
 		PageSize:  pageSize,
 	}
-
 	if s := r.URL.Query().Get("status"); s != "" {
 		f.Status = models.FileStatus(s)
 	}
@@ -111,13 +105,10 @@ func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
 		api.WriteInternalError(w, err)
 		return
 	}
-
 	api.WritePaged(w, result.Files, result.Total, page, pageSize)
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/files/{id}
-// ─────────────────────────────────────────────────────────────────────────────
+// ── GET /api/files/{id} ───────────────────────────────────────────────────────
 
 func (h *Handler) GetFile(w http.ResponseWriter, r *http.Request) {
 	id, err := api.PathID(r, "id")
@@ -125,23 +116,19 @@ func (h *Handler) GetFile(w http.ResponseWriter, r *http.Request) {
 		api.WriteBadRequest(w, err.Error())
 		return
 	}
-
 	file, err := h.svc.GetFile(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
-			api.WriteNotFound(w, "file not found")
+			api.WriteNotFound(w, "فایل یافت نشد")
 			return
 		}
 		api.WriteInternalError(w, err)
 		return
 	}
-
 	api.WriteOK(w, file)
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DELETE /api/files/{id}    (admin only)
-// ─────────────────────────────────────────────────────────────────────────────
+// ── DELETE /api/files/{id} (admin) ───────────────────────────────────────────
 
 func (h *Handler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 	id, err := api.PathID(r, "id")
@@ -149,32 +136,25 @@ func (h *Handler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 		api.WriteBadRequest(w, err.Error())
 		return
 	}
-
 	if err := h.svc.DeleteFile(r.Context(), id); err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
-			api.WriteNotFound(w, "file not found")
+			api.WriteNotFound(w, "فایل یافت نشد")
 			return
 		}
 		api.WriteInternalError(w, err)
 		return
 	}
-
 	api.WriteNoContent(w)
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/files/{id}/headers
-// ─────────────────────────────────────────────────────────────────────────────
+// ── GET /api/files/{id}/headers ───────────────────────────────────────────────
 
-// ListHeaders godoc
-// Query params: page, page_size, search, hdu_index
 func (h *Handler) ListHeaders(w http.ResponseWriter, r *http.Request) {
 	id, err := api.PathID(r, "id")
 	if err != nil {
 		api.WriteBadRequest(w, err.Error())
 		return
 	}
-
 	page, pageSize, _ := api.Pagination(r)
 	f := repository.ListHeadersFilter{
 		FileID:   id,
@@ -182,28 +162,23 @@ func (h *Handler) ListHeaders(w http.ResponseWriter, r *http.Request) {
 		Page:     page,
 		PageSize: pageSize,
 	}
-	if hduStr := r.URL.Query().Get("hdu_index"); hduStr != "" {
-		if hduIdx := api.QueryInt(r, "hdu_index", -1); hduIdx >= 0 {
-			f.HDUIndex = &hduIdx
-		}
+	if hduIdx := api.QueryInt(r, "hdu_index", -1); hduIdx >= 0 {
+		f.HDUIndex = &hduIdx
 	}
 
 	result, err := h.svc.ListHeaders(r.Context(), f)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
-			api.WriteNotFound(w, "file not found")
+			api.WriteNotFound(w, "فایل یافت نشد")
 			return
 		}
 		api.WriteInternalError(w, err)
 		return
 	}
-
 	api.WritePaged(w, result.Headers, result.Total, page, pageSize)
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/files/{id}/metadata
-// ─────────────────────────────────────────────────────────────────────────────
+// ── GET /api/files/{id}/metadata ─────────────────────────────────────────────
 
 func (h *Handler) GetMetadata(w http.ResponseWriter, r *http.Request) {
 	id, err := api.PathID(r, "id")
@@ -211,28 +186,24 @@ func (h *Handler) GetMetadata(w http.ResponseWriter, r *http.Request) {
 		api.WriteBadRequest(w, err.Error())
 		return
 	}
-
 	meta, err := h.svc.GetMetadata(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
-			api.WriteNotFound(w, "metadata not found")
+			api.WriteNotFound(w, "متادیتا یافت نشد")
 			return
 		}
 		api.WriteInternalError(w, err)
 		return
 	}
-
 	api.WriteOK(w, meta)
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PUT /api/files/{id}/metadata    (editor or admin)
-// ─────────────────────────────────────────────────────────────────────────────
+// ── PUT /api/files/{id}/metadata (editor/admin) ───────────────────────────────
 
 type editMetadataRequest struct {
-	FieldName string `json:"field_name"` // e.g. "object", "ra", "filter"
+	FieldName string `json:"field_name"`
 	NewValue  string `json:"new_value"`
-	Reason    string `json:"reason"` // optional
+	Reason    string `json:"reason"`
 }
 
 func (h *Handler) EditMetadata(w http.ResponseWriter, r *http.Request) {
@@ -241,19 +212,17 @@ func (h *Handler) EditMetadata(w http.ResponseWriter, r *http.Request) {
 		api.WriteBadRequest(w, err.Error())
 		return
 	}
-
 	claims := auth.ClaimsFromContext(r.Context())
 	if claims == nil {
-		api.WriteUnauthorized(w, "not authenticated")
+		api.WriteUnauthorized(w, "احراز هویت نشدید")
 		return
 	}
-
 	var req editMetadataRequest
 	if !api.DecodeJSON(w, r, &req) {
 		return
 	}
 	if strings.TrimSpace(req.FieldName) == "" || strings.TrimSpace(req.NewValue) == "" {
-		api.WriteBadRequest(w, "field_name and new_value are required")
+		api.WriteBadRequest(w, "field_name و new_value الزامی هستند")
 		return
 	}
 
@@ -265,14 +234,13 @@ func (h *Handler) EditMetadata(w http.ResponseWriter, r *http.Request) {
 		EditorID:  claims.UserID,
 	}); err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
-			api.WriteNotFound(w, "file or metadata not found")
+			api.WriteNotFound(w, "فایل یا متادیتا یافت نشد")
 			return
 		}
 		api.WriteBadRequest(w, err.Error())
 		return
 	}
 
-	// Return updated metadata
 	meta, err := h.svc.GetMetadata(r.Context(), id)
 	if err != nil {
 		api.WriteInternalError(w, err)
@@ -281,9 +249,7 @@ func (h *Handler) EditMetadata(w http.ResponseWriter, r *http.Request) {
 	api.WriteOK(w, meta)
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/files/{id}/metadata/history
-// ─────────────────────────────────────────────────────────────────────────────
+// ── GET /api/files/{id}/metadata/history ─────────────────────────────────────
 
 func (h *Handler) GetMetadataHistory(w http.ResponseWriter, r *http.Request) {
 	id, err := api.PathID(r, "id")
@@ -291,26 +257,21 @@ func (h *Handler) GetMetadataHistory(w http.ResponseWriter, r *http.Request) {
 		api.WriteBadRequest(w, err.Error())
 		return
 	}
-
 	overrides, err := h.svc.GetOverrides(r.Context(), id)
 	if err != nil {
 		api.WriteInternalError(w, err)
 		return
 	}
-
 	if overrides == nil {
 		overrides = []repository.MetadataOverride{}
 	}
 	api.WriteOK(w, overrides)
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/jobs
-// ─────────────────────────────────────────────────────────────────────────────
+// ── GET /api/jobs ─────────────────────────────────────────────────────────────
 
 func (h *Handler) ListJobs(w http.ResponseWriter, r *http.Request) {
 	page, pageSize, _ := api.Pagination(r)
-
 	jobs, total, err := h.svc.ListJobs(r.Context(), page, pageSize)
 	if err != nil {
 		api.WriteInternalError(w, err)
@@ -322,9 +283,7 @@ func (h *Handler) ListJobs(w http.ResponseWriter, r *http.Request) {
 	api.WritePaged(w, jobs, total, page, pageSize)
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/jobs/{id}
-// ─────────────────────────────────────────────────────────────────────────────
+// ── GET /api/jobs/{id} ────────────────────────────────────────────────────────
 
 func (h *Handler) GetJob(w http.ResponseWriter, r *http.Request) {
 	id, err := api.PathID(r, "id")
@@ -332,11 +291,10 @@ func (h *Handler) GetJob(w http.ResponseWriter, r *http.Request) {
 		api.WriteBadRequest(w, err.Error())
 		return
 	}
-
 	job, err := h.svc.GetJob(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
-			api.WriteNotFound(w, "job not found")
+			api.WriteNotFound(w, "جاب یافت نشد")
 			return
 		}
 		api.WriteInternalError(w, err)
@@ -345,9 +303,7 @@ func (h *Handler) GetJob(w http.ResponseWriter, r *http.Request) {
 	api.WriteOK(w, job)
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/jobs/{id}/errors
-// ─────────────────────────────────────────────────────────────────────────────
+// ── GET /api/jobs/{id}/errors ─────────────────────────────────────────────────
 
 func (h *Handler) GetJobErrors(w http.ResponseWriter, r *http.Request) {
 	id, err := api.PathID(r, "id")
@@ -355,13 +311,11 @@ func (h *Handler) GetJobErrors(w http.ResponseWriter, r *http.Request) {
 		api.WriteBadRequest(w, err.Error())
 		return
 	}
-
 	page, pageSize, _ := api.Pagination(r)
-
 	errs, total, err := h.svc.GetJobErrors(r.Context(), id, page, pageSize)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
-			api.WriteNotFound(w, "job not found")
+			api.WriteNotFound(w, "جاب یافت نشد")
 			return
 		}
 		api.WriteInternalError(w, err)
@@ -373,9 +327,7 @@ func (h *Handler) GetJobErrors(w http.ResponseWriter, r *http.Request) {
 	api.WritePaged(w, errs, total, page, pageSize)
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/jobs/{id}/status   — lightweight poll endpoint
-// ─────────────────────────────────────────────────────────────────────────────
+// ── GET /api/jobs/{id}/status ─────────────────────────────────────────────────
 
 func (h *Handler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
 	id, err := api.PathID(r, "id")
@@ -383,17 +335,15 @@ func (h *Handler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
 		api.WriteBadRequest(w, err.Error())
 		return
 	}
-
 	job, err := h.svc.GetJob(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
-			api.WriteNotFound(w, "job not found")
+			api.WriteNotFound(w, "جاب یافت نشد")
 			return
 		}
 		api.WriteInternalError(w, err)
 		return
 	}
-
 	api.WriteOK(w, map[string]interface{}{
 		"id":          job.ID,
 		"status":      job.Status,
@@ -404,30 +354,25 @@ func (h *Handler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /api/scan    (admin only)
-// ─────────────────────────────────────────────────────────────────────────────
+// ── POST /api/scan (admin) ────────────────────────────────────────────────────
 
 type triggerScanRequest struct {
-	ScanDir string `json:"scan_dir"` // optional — falls back to FITS_SCAN_DIR
+	ScanDir string `json:"scan_dir"`
 }
 
 func (h *Handler) TriggerScan(w http.ResponseWriter, r *http.Request) {
 	var req triggerScanRequest
-	// Body is optional — ignore decode errors
-	_ = api.DecodeJSON(w, r, &req)
+	_ = api.DecodeJSON(w, r, &req) // body optional
 
 	scanDir := strings.TrimSpace(req.ScanDir)
 	if scanDir == "" {
 		scanDir = h.scanDir
 	}
 	if scanDir == "" {
-		api.WriteBadRequest(w, "scan_dir is required (or set FITS_SCAN_DIR)")
+		api.WriteBadRequest(w, "scan_dir الزامی است (یا FITS_SCAN_DIR را تنظیم کنید)")
 		return
 	}
 
-	// The run function is nil here — the actual processor will be injected via SetRunFn
-	// For now return job ID; the processor goroutine is started by the service
 	jobID, err := h.svc.TriggerScan(r.Context(), scanDir, h.runFn)
 	if err != nil {
 		if errors.Is(err, fitsservice.ErrScanAlreadyRunning) {
@@ -441,28 +386,25 @@ func (h *Handler) TriggerScan(w http.ResponseWriter, r *http.Request) {
 	api.WriteCreated(w, map[string]interface{}{
 		"job_id":   jobID,
 		"scan_dir": scanDir,
-		"message":  "scan started",
+		"message":  "اسکن شروع شد",
 	})
 }
 
-// runFn is set by SetRunFn — it is the actual scan-and-process function.
-var _ = (*Handler)(nil) // ensure interface
-
-func (h *Handler) runFn(_ int64) {
-	// Default no-op — replaced via SetRunFn from main
-}
-
-// SetRunFn injects the actual processor run function.
-// Called from main after both the handler and processor are initialised.
-func (h *Handler) SetRunFn(fn func(jobID int64)) {
-	h.runFn = fn
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /ready
-// ─────────────────────────────────────────────────────────────────────────────
+// ── GET /ready ────────────────────────────────────────────────────────────────
 
 func (h *Handler) Ready(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_, _ = w.Write([]byte(`{"status":"ready","service":"fits-processor"}`))
+}
+
+// ── GET /api/stats ────────────────────────────────────────────────────────────
+// Returns summary counts for the dashboard. Public to all authenticated users.
+
+func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
+	stats, err := h.svc.GetStats(r.Context())
+	if err != nil {
+		api.WriteInternalError(w, err)
+		return
+	}
+	api.WriteOK(w, stats)
 }

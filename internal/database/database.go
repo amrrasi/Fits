@@ -1,4 +1,3 @@
-// Package database manages the PostgreSQL connection pool and runs migrations.
 package database
 
 import (
@@ -15,12 +14,10 @@ import (
 	"github.com/amrrasi/fits/internal/logger"
 )
 
-// DB wraps the pgx connection pool.
 type DB struct {
 	Pool *pgxpool.Pool
 }
 
-// Connect creates and validates a PostgreSQL connection pool using the supplied config.
 func Connect(ctx context.Context, cfg config.DBConfig) (*DB, error) {
 	poolCfg, err := pgxpool.ParseConfig(cfg.PgxDSN())
 	if err != nil {
@@ -38,7 +35,6 @@ func Connect(ctx context.Context, cfg config.DBConfig) (*DB, error) {
 		return nil, fmt.Errorf("database: create pool: %w", err)
 	}
 
-	// Verify connection
 	pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	if err := pool.Ping(pingCtx); err != nil {
@@ -58,7 +54,6 @@ func Connect(ctx context.Context, cfg config.DBConfig) (*DB, error) {
 	return &DB{Pool: pool}, nil
 }
 
-// Close shuts down the connection pool gracefully.
 func (db *DB) Close() {
 	if db.Pool != nil {
 		db.Pool.Close()
@@ -66,8 +61,6 @@ func (db *DB) Close() {
 	}
 }
 
-// Migrate runs all pending SQL migrations from the given directory.
-// The migrations directory must contain files named NNN_description.up.sql.
 func Migrate(databaseURL, migrationsDir string) error {
 	sourceURL := fmt.Sprintf("file://%s", migrationsDir)
 

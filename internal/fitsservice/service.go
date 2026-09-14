@@ -283,3 +283,53 @@ func joinKeys(m map[string]struct{}) string {
 
 // ErrScanAlreadyRunning is returned when a scan is triggered while one is active.
 var ErrScanAlreadyRunning = fmt.Errorf("a scan is already running")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stats (dashboard summary)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Stats holds summary counts for the dashboard.
+type Stats struct {
+	TotalFiles      int `json:"total_files"`
+	DoneFiles       int `json:"done_files"`
+	ErrorFiles      int `json:"error_files"`
+	PendingFiles    int `json:"pending_files"`
+	TotalJobs       int `json:"total_jobs"`
+	RunningJobs     int `json:"running_jobs"`
+	TotalHeaders    int `json:"total_headers"`
+}
+
+// GetStats queries aggregate counts from the database.
+func (s *Service) GetStats(ctx context.Context) (*Stats, error) {
+	stats := &Stats{}
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT status, COUNT(*) FROM fits_files GROUP BY status
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("fitsservice: stats files: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var status string
+		var count int
+		if err := rows.Scan(&status, &count); err != nil {
+			continue
+		}
+		stats.TotalFiles += count
+		switch status {
+		case "done":
+			stats.DoneFiles = count
+		case "error":
+			stats.ErrorFiles = count
+		case "pending":
+			stats.PendingFiles = count
+		}
+	}
+
+	_ = s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM processing_jobs`).Scan(&stats.TotalJobs)
+	_ = s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM processing_jobs WHERE status='running'`).Scan(&stats.RunningJobs)
+	_ = s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM fits_headers`).Scan(&stats.TotalHeaders)
+
+	return stats, nil
+}
