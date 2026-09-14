@@ -11,26 +11,20 @@ import (
 	"github.com/amrrasi/fits/internal/repository"
 )
 
-// Service handles user management operations.
 type Service struct {
 	repo *repository.UserRepository
 }
 
-// New creates a user Service.
 func New(repo *repository.UserRepository) *Service {
 	return &Service{repo: repo}
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Read
-// ─────────────────────────────────────────────────────────────────────────────
 
-// List returns a filtered, paginated list of users.
 func (s *Service) List(ctx context.Context, f repository.ListUsersFilter) (*repository.ListUsersResult, error) {
 	return s.repo.ListUsers(ctx, f)
 }
 
-// GetByID returns a single user by ID.
+
 func (s *Service) GetByID(ctx context.Context, id int64) (*models.User, error) {
 	u, err := s.repo.GetByID(ctx, id)
 	if err != nil {
@@ -39,11 +33,6 @@ func (s *Service) GetByID(ctx context.Context, id int64) (*models.User, error) {
 	return u, nil
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Create
-// ─────────────────────────────────────────────────────────────────────────────
-
-// CreateInput is the payload for creating a new user.
 type CreateInput struct {
 	Email    string
 	Password string
@@ -51,30 +40,28 @@ type CreateInput struct {
 	Role     models.Role
 }
 
-// Create validates and inserts a new user. Returns the new user's ID.
 func (s *Service) Create(ctx context.Context, in CreateInput) (int64, error) {
 	// Normalise
 	in.Email = strings.TrimSpace(strings.ToLower(in.Email))
 	in.FullName = strings.TrimSpace(in.FullName)
 
-	// Validate
 	if in.Email == "" {
 		return 0, fmt.Errorf("email is required")
 	}
 	if !strings.Contains(in.Email, "@") {
-		return 0, fmt.Errorf("invalid email address")
+		return 0, fmt.Errorf("آدرس ایمیل نامعتبر")
 	}
 	if len(in.Password) < 8 {
-		return 0, fmt.Errorf("password must be at least 8 characters")
+		return 0, fmt.Errorf("رمز عبور شما باید بیش از 8 کاراکتر باشد")
 	}
 	if in.Role == "" {
 		in.Role = models.RoleViewer
 	}
 	if !validRole(in.Role) {
-		return 0, fmt.Errorf("invalid role: must be admin, editor, or viewer")
+		return 0, fmt.Errorf("نقش نامعتبر! نقش های مجاز: admin, editor, reader")
 	}
 
-	// Duplicate check
+
 	exists, err := s.repo.EmailExists(ctx, in.Email)
 	if err != nil {
 		return 0, fmt.Errorf("userservice: check email: %w", err)
@@ -95,24 +82,17 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (int64, error) {
 	return id, nil
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Update
-// ─────────────────────────────────────────────────────────────────────────────
-
-// UpdateInput is the payload for editing a user.
 type UpdateInput struct {
 	FullName string
 	Role     models.Role
 	IsActive bool
 }
 
-// Update edits a user's profile fields and role.
-// Callers must verify the caller is admin before calling this.
 func (s *Service) Update(ctx context.Context, id int64, in UpdateInput) error {
 	in.FullName = strings.TrimSpace(in.FullName)
 
 	if !validRole(in.Role) {
-		return fmt.Errorf("invalid role: must be admin, editor, or viewer")
+		return fmt.Errorf("نقش نامعتبر! نقش های مجاز: admin, editor, reader")
 	}
 
 	// Prevent locking out the last admin
@@ -125,21 +105,15 @@ func (s *Service) Update(ctx context.Context, id int64, in UpdateInput) error {
 	return s.repo.UpdateUser(ctx, id, in.FullName, in.Role, in.IsActive)
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Password
-// ─────────────────────────────────────────────────────────────────────────────
-
-// ChangePasswordInput is the payload for changing a user's own password.
 type ChangePasswordInput struct {
 	UserID      int64
 	OldPassword string
 	NewPassword string
 }
 
-// ChangePassword verifies the old password then sets the new one.
 func (s *Service) ChangePassword(ctx context.Context, in ChangePasswordInput) error {
 	if len(in.NewPassword) < 8 {
-		return fmt.Errorf("new password must be at least 8 characters")
+		return fmt.Errorf("رمز عبور جدید میبایست حداقل 8 کاراکتر باشد")
 	}
 
 	user, err := s.repo.GetByID(ctx, in.UserID)
@@ -148,7 +122,7 @@ func (s *Service) ChangePassword(ctx context.Context, in ChangePasswordInput) er
 	}
 
 	if err := auth.CheckPassword(in.OldPassword, user.PasswordHash); err != nil {
-		return fmt.Errorf("current password is incorrect")
+		return fmt.Errorf("رمز عبور فعلی اشتباه میباشد")
 	}
 
 	hash, err := auth.HashPassword(in.NewPassword)
@@ -159,11 +133,9 @@ func (s *Service) ChangePassword(ctx context.Context, in ChangePasswordInput) er
 	return s.repo.UpdatePassword(ctx, in.UserID, hash)
 }
 
-// AdminResetPassword lets an admin set a new password for any user without
-// needing the old one.
 func (s *Service) AdminResetPassword(ctx context.Context, userID int64, newPassword string) error {
 	if len(newPassword) < 8 {
-		return fmt.Errorf("password must be at least 8 characters")
+		return fmt.Errorf("رمز عبور میبایست حداقل 8 کاراکتر باشد")
 	}
 	hash, err := auth.HashPassword(newPassword)
 	if err != nil {
@@ -172,11 +144,7 @@ func (s *Service) AdminResetPassword(ctx context.Context, userID int64, newPassw
 	return s.repo.UpdatePassword(ctx, userID, hash)
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Delete
-// ─────────────────────────────────────────────────────────────────────────────
 
-// Delete hard-deletes a user. Prevents deleting the last admin.
 func (s *Service) Delete(ctx context.Context, id int64) error {
 	if err := s.guardLastAdmin(ctx, id); err != nil {
 		return err
@@ -184,11 +152,7 @@ func (s *Service) Delete(ctx context.Context, id int64) error {
 	return s.repo.DeleteUser(ctx, id)
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────────────────
 
-// guardLastAdmin returns an error if deleting/demoting userID would leave no admins.
 func (s *Service) guardLastAdmin(ctx context.Context, userID int64) error {
 	target, err := s.repo.GetByID(ctx, userID)
 	if err != nil {
@@ -198,7 +162,6 @@ func (s *Service) guardLastAdmin(ctx context.Context, userID int64) error {
 		return nil // not an admin, no guard needed
 	}
 
-	// Count active admins
 	t := true
 	result, err := s.repo.ListUsers(ctx, repository.ListUsersFilter{
 		Role:     models.RoleAdmin,
@@ -219,13 +182,9 @@ func validRole(r models.Role) bool {
 	return r == models.RoleAdmin || r == models.RoleEditor || r == models.RoleViewer
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Sentinel errors
-// ─────────────────────────────────────────────────────────────────────────────
-
 var (
-	ErrEmailTaken = fmt.Errorf("a user with that email already exists")
-	ErrLastAdmin  = fmt.Errorf("cannot remove or demote the last active admin account")
+	ErrEmailTaken = fmt.Errorf("کاربری با ایمیل وارد شده وجود دارد")
+	ErrLastAdmin  = fmt.Errorf("امکان حذف و یا تغییر آخرین فعالیت ادمین وجود ندارد")
 )
 
 // ListAuditLogs returns paginated audit log entries.

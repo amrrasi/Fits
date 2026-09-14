@@ -1,5 +1,3 @@
-// Package fits provides utilities for scanning the filesystem for FITS files
-// and parsing their HDU headers into domain models.
 package fits
 
 import (
@@ -18,15 +16,12 @@ import (
 	"github.com/amrrasi/fits/internal/models"
 )
 
-// ParseResult is returned by ParseFile. It holds everything extracted from one FITS file.
 type ParseResult struct {
 	File     models.FITSFile
 	Headers  []models.FITSHeader
 	Metadata models.FITSMetadata
 }
 
-// ParseFile opens a FITS file, reads all HDUs, extracts headers, and returns a ParseResult.
-// It does NOT write to the database — that is the repository layer's job.
 func ParseFile(path string) (*ParseResult, error) {
 	log := logger.S().With("file", path)
 	log.Debug("fits: opening file")
