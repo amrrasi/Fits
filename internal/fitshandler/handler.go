@@ -66,6 +66,9 @@ func (h *Handler) RegisterRoutes(
 	// Scan trigger (admin only)
 	mux.Handle("POST /api/scan", authMW(adminMW(http.HandlerFunc(h.TriggerScan))))
 
+	// Stats (dashboard)
+	mux.Handle("GET /api/stats", authMW(http.HandlerFunc(h.Stats)))
+
 	// Readiness
 	mux.HandleFunc("GET /ready", h.Ready)
 }
@@ -392,4 +395,16 @@ func (h *Handler) TriggerScan(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Ready(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_, _ = w.Write([]byte(`{"status":"ready","service":"fits-processor"}`))
+}
+
+// ── GET /api/stats ────────────────────────────────────────────────────────────
+// Returns summary counts for the dashboard. Public to all authenticated users.
+
+func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
+	stats, err := h.svc.GetStats(r.Context())
+	if err != nil {
+		api.WriteInternalError(w, err)
+		return
+	}
+	api.WriteOK(w, stats)
 }

@@ -3,28 +3,41 @@ import { AuthProvider } from './context/AuthContext'
 import ProtectedRoute from './components/layout/ProtectedRoute'
 import AppLayout from './components/layout/AppLayout'
 import LoginPage from './pages/auth/LoginPage'
+import DashboardPage from './pages/dashboard/DashboardPage'
 import FilesPage from './pages/files/FilesPage'
 import FileDetailPage from './pages/files/FileDetailPage'
 import JobsPage from './pages/jobs/JobsPage'
+import JobDetailPage from './pages/jobs/JobDetailPage'
 import UsersPage from './pages/users/UsersPage'
+import ProfilePage from './pages/profile/ProfilePage'
 
 export default function App() {
   return (
     <AuthProvider>
       <Routes>
+        {/* Public */}
         <Route path="/login" element={<LoginPage />} />
+
+        {/* All authenticated users */}
         <Route element={<ProtectedRoute />}>
           <Route element={<AppLayout />}>
-            <Route path="/" element={<Navigate to="/files" replace />} />
-            <Route path="/files" element={<FilesPage />} />
-            <Route path="/files/:id" element={<FileDetailPage />} />
-            <Route path="/jobs" element={<JobsPage />} />
+            <Route path="/"            element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard"   element={<DashboardPage />} />
+            <Route path="/files"       element={<FilesPage />} />
+            <Route path="/files/:id"   element={<FileDetailPage />} />
+            <Route path="/jobs"        element={<JobsPage />} />
+            <Route path="/jobs/:id"    element={<JobDetailPage />} />
+            <Route path="/profile"     element={<ProfilePage />} />
+
+            {/* Admin only */}
             <Route element={<ProtectedRoute requiredRole="admin" />}>
               <Route path="/users" element={<UsersPage />} />
             </Route>
           </Route>
         </Route>
-        <Route path="*" element={<Navigate to="/files" replace />} />
+
+        {/* Catch-all */}
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </AuthProvider>
   )

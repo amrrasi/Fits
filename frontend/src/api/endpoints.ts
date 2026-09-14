@@ -91,6 +91,22 @@ export const filesApi = {
     api.get<ApiResponse<MetadataOverride[]>>(`/files/${id}/metadata/history`).then((r) => r.data.data),
 }
 
+// ── Stats ─────────────────────────────────────────────────────────────────────
+
+export interface DashboardStats {
+  total_files: number
+  done_files: number
+  error_files: number
+  pending_files: number
+  total_jobs: number
+  running_jobs: number
+  total_headers: number
+}
+
+export const statsApi = {
+  get: () => api.get<ApiResponse<DashboardStats>>('/stats').then((r) => r.data.data),
+}
+
 // ── Jobs ──────────────────────────────────────────────────────────────────────
 
 export const jobsApi = {
