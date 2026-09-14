@@ -227,3 +227,8 @@ var (
 	ErrEmailTaken = fmt.Errorf("a user with that email already exists")
 	ErrLastAdmin  = fmt.Errorf("cannot remove or demote the last active admin account")
 )
+
+// ListAuditLogs returns paginated audit log entries.
+func (s *Service) ListAuditLogs(ctx context.Context, f repository.ListAuditFilter) ([]repository.AuditLog, int, error) {
+	return s.repo.ListAuditLogs(ctx, f)
+}

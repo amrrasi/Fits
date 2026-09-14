@@ -47,6 +47,10 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux, authMW, adminMW func(http.H
 		authMW(adminMW(http.HandlerFunc(h.Delete))))
 	mux.Handle("PUT /api/users/{id}/password",
 		authMW(adminMW(http.HandlerFunc(h.AdminResetPassword))))
+
+	// ── /api/audit-logs — admin only ─────────────────────────────────────────
+	mux.Handle("GET /api/audit-logs",
+		authMW(adminMW(http.HandlerFunc(h.ListAuditLogs))))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -343,4 +347,33 @@ func (h *Handler) AdminResetPassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	api.WriteOK(w, map[string]string{"message": "password reset"})
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/audit-logs   (admin only)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ListAuditLogs returns paginated audit log entries with optional filters.
+// Query params: page, page_size, action, entity_type, date_from, date_to
+func (h *Handler) ListAuditLogs(w http.ResponseWriter, r *http.Request) {
+	page, pageSize, _ := api.Pagination(r)
+
+	f := repository.ListAuditFilter{
+		Action:     api.QueryString(r, "action", ""),
+		EntityType: api.QueryString(r, "entity_type", ""),
+		DateFrom:   api.QueryString(r, "date_from", ""),
+		DateTo:     api.QueryString(r, "date_to", ""),
+		Page:       page,
+		PageSize:   pageSize,
+	}
+
+	logs, total, err := h.svc.ListAuditLogs(r.Context(), f)
+	if err != nil {
+		api.WriteInternalError(w, err)
+		return
+	}
+	if logs == nil {
+		logs = []repository.AuditLog{}
+	}
+	api.WritePaged(w, logs, total, page, pageSize)
 }

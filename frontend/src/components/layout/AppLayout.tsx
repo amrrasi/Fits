@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import {
-  LayoutDashboard, Files, Cpu, Users, LogOut, Star, ChevronRight, UserCircle
+  LayoutDashboard, Files, Cpu, Users, LogOut, Star, ChevronRight, UserCircle, Shield
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import clsx from 'clsx'
@@ -12,15 +12,17 @@ const navItems = [
 ]
 
 const adminItems = [
-  { to: '/users', label: 'مدیریت کاربران', icon: Users },
+  { to: '/users',      label: 'مدیریت کاربران', icon: Users },
+  { to: '/audit-logs', label: 'لاگ ممیزی',       icon: Shield },
 ]
 
 const breadcrumbMap: Record<string, string> = {
-  '/dashboard': 'داشبورد',
-  '/files':     'فایل‌های FITS',
-  '/jobs':      'اسکن‌ها',
-  '/users':     'مدیریت کاربران',
-  '/profile':   'پروفایل من',
+  '/dashboard':  'داشبورد',
+  '/files':      'فایل‌های FITS',
+  '/jobs':       'اسکن‌ها',
+  '/users':      'مدیریت کاربران',
+  '/audit-logs': 'لاگ ممیزی',
+  '/profile':    'پروفایل من',
 }
 
 export default function AppLayout() {

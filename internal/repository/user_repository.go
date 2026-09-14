@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -201,3 +202,124 @@ func (r *UserRepository) DeleteExpiredSessions(ctx context.Context) (int64, erro
 
 // ErrNotFound is returned when a queried row does not exist.
 var ErrNotFound = fmt.Errorf("repository: not found")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Audit Logs
+// ─────────────────────────────────────────────────────────────────────────────
+
+// AuditLog is a single row from the audit_logs table.
+type AuditLog struct {
+	ID         int64       `json:"id"`
+	UserID     *int64      `json:"user_id"`
+	UserEmail  *string     `json:"user_email"`
+	Action     string      `json:"action"`
+	EntityType string      `json:"entity_type"`
+	EntityID   *string     `json:"entity_id"`
+	OldValue   interface{} `json:"old_value"`
+	NewValue   interface{} `json:"new_value"`
+	IPAddress  *string     `json:"ip_address"`
+	RequestID  *string     `json:"request_id"`
+	CreatedAt  string      `json:"created_at"`
+}
+
+// ListAuditFilter controls filtering for audit logs.
+type ListAuditFilter struct {
+	UserID     *int64
+	Action     string
+	EntityType string
+	DateFrom   string
+	DateTo     string
+	Page       int
+	PageSize   int
+}
+
+// ListAuditLogs returns paginated audit log entries with optional filters.
+func (r *UserRepository) ListAuditLogs(ctx context.Context, f ListAuditFilter) ([]AuditLog, int, error) {
+	where := []string{"1=1"}
+	args := []interface{}{}
+	idx := 1
+
+	if f.UserID != nil {
+		where = append(where, fmt.Sprintf("a.user_id = $%d", idx))
+		args = append(args, *f.UserID)
+		idx++
+	}
+	if f.Action != "" {
+		where = append(where, fmt.Sprintf("a.action = $%d", idx))
+		args = append(args, f.Action)
+		idx++
+	}
+	if f.EntityType != "" {
+		where = append(where, fmt.Sprintf("a.entity_type = $%d", idx))
+		args = append(args, f.EntityType)
+		idx++
+	}
+	if f.DateFrom != "" {
+		where = append(where, fmt.Sprintf("a.created_at >= $%d", idx))
+		args = append(args, f.DateFrom)
+		idx++
+	}
+	if f.DateTo != "" {
+		where = append(where, fmt.Sprintf("a.created_at <= $%d", idx))
+		args = append(args, f.DateTo)
+		idx++
+	}
+
+	clause := strings.Join(where, " AND ")
+
+	var total int
+	if err := r.pool.QueryRow(ctx,
+		fmt.Sprintf("SELECT COUNT(*) FROM audit_logs a WHERE %s", clause),
+		args...,
+	).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("repository: count audit logs: %w", err)
+	}
+
+	if f.Page < 1 { f.Page = 1 }
+	if f.PageSize < 1 { f.PageSize = 50 }
+	offset := (f.Page - 1) * f.PageSize
+
+	listArgs := append(args, f.PageSize, offset)
+	q := fmt.Sprintf(`
+		SELECT a.id, a.user_id, u.email, a.action, a.entity_type, a.entity_id,
+		       a.old_value, a.new_value, a.ip_address, a.request_id,
+		       TO_CHAR(a.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+		FROM audit_logs a
+		LEFT JOIN users u ON u.id = a.user_id
+		WHERE %s
+		ORDER BY a.created_at DESC
+		LIMIT $%d OFFSET $%d`, clause, idx, idx+1)
+
+	rows, err := r.pool.Query(ctx, q, listArgs...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("repository: list audit logs: %w", err)
+	}
+	defer rows.Close()
+
+	var logs []AuditLog
+	for rows.Next() {
+		var l AuditLog
+		if err := rows.Scan(
+			&l.ID, &l.UserID, &l.UserEmail,
+			&l.Action, &l.EntityType, &l.EntityID,
+			&l.OldValue, &l.NewValue,
+			&l.IPAddress, &l.RequestID, &l.CreatedAt,
+		); err != nil {
+			return nil, 0, fmt.Errorf("repository: scan audit log: %w", err)
+		}
+		logs = append(logs, l)
+	}
+	return logs, total, nil
+}
+
+// InsertAuditLog writes an audit entry. userID nil = system action.
+func (r *UserRepository) InsertAuditLog(ctx context.Context, userID *int64, action, entityType, entityID string, oldVal, newVal interface{}, ip, requestID string) error {
+	const q = `
+		INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_value, new_value, ip_address, request_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
+	_, err := r.pool.Exec(ctx, q, userID, action, entityType, entityID, oldVal, newVal, ip, requestID)
+	if err != nil {
+		return fmt.Errorf("repository: insert audit log: %w", err)
+	}
+	return nil
+}
