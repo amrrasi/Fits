@@ -9,23 +9,16 @@ import (
 	"github.com/amrrasi/fits/internal/logger"
 )
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Standard response envelopes
-// ─────────────────────────────────────────────────────────────────────────────
-
-// Response is the standard success envelope.
 type Response struct {
 	Data interface{} `json:"data"`
 }
 
-// ErrorResponse is the standard error envelope.
 type ErrorResponse struct {
 	Error     string `json:"error"`
 	Code      int    `json:"code"`
 	RequestID string `json:"request_id,omitempty"`
 }
 
-// PagedResponse wraps a list result with pagination metadata.
 type PagedResponse struct {
 	Data       interface{} `json:"data"`
 	Total      int         `json:"total"`
@@ -33,8 +26,6 @@ type PagedResponse struct {
 	PageSize   int         `json:"page_size"`
 	TotalPages int         `json:"total_pages"`
 }
-
-// Writers
 
 func WriteJSON(w http.ResponseWriter, status int, body interface{}) {
 	w.Header().Set("Content-Type", "application/json")
@@ -70,8 +61,6 @@ func WritePaged(w http.ResponseWriter, data interface{}, total, page, pageSize i
 	})
 }
 
-// Error writers
-
 func WriteBadRequest(w http.ResponseWriter, msg string) {
 	WriteJSON(w, http.StatusBadRequest, ErrorResponse{Error: msg, Code: 400})
 }
@@ -97,10 +86,6 @@ func WriteInternalError(w http.ResponseWriter, err error) {
 	WriteJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "مشکلی در سرور داخلی پیش آمده", Code: 500})
 }
 
-// Request parsing helpers
-
-// DecodeJSON reads and decodes a JSON request body into dst.
-// Returns false and writes a 400 response if decoding fails.
 func DecodeJSON(w http.ResponseWriter, r *http.Request, dst interface{}) bool {
 	if err := json.NewDecoder(r.Body).Decode(dst); err != nil {
 		WriteBadRequest(w, "invalid JSON body: "+err.Error())
@@ -109,8 +94,6 @@ func DecodeJSON(w http.ResponseWriter, r *http.Request, dst interface{}) bool {
 	return true
 }
 
-// PathID extracts a named segment from the URL path as int64.
-// Uses the Go 1.22 pattern syntax: /api/users/{id}
 func PathID(r *http.Request, name string) (int64, error) {
 	raw := r.PathValue(name)
 	if raw == "" {
@@ -126,7 +109,6 @@ func PathID(r *http.Request, name string) (int64, error) {
 	return id, nil
 }
 
-// QueryInt reads an integer query parameter, returning fallback if absent or invalid.
 func QueryInt(r *http.Request, key string, fallback int) int {
 	v := r.URL.Query().Get(key)
 	if v == "" {
@@ -139,7 +121,6 @@ func QueryInt(r *http.Request, key string, fallback int) int {
 	return i
 }
 
-// QueryString reads a string query parameter, returning fallback if absent.
 func QueryString(r *http.Request, key, fallback string) string {
 	if v := r.URL.Query().Get(key); v != "" {
 		return v
@@ -147,7 +128,6 @@ func QueryString(r *http.Request, key, fallback string) string {
 	return fallback
 }
 
-// Pagination reads page + page_size from query params with sensible defaults.
 func Pagination(r *http.Request) (page, pageSize, offset int) {
 	page = QueryInt(r, "page", 1)
 	pageSize = QueryInt(r, "page_size", 20)
