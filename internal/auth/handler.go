@@ -27,17 +27,6 @@ type loginRequest struct {
 	Password string `json:"password"`
 }
 
-// Login godoc
-// @Summary     Authenticate user
-// @Description Returns access + refresh token pair on valid credentials
-// @Tags        auth
-// @Accept      json
-// @Produce     json
-// @Param       body body loginRequest true "Credentials"
-// @Success     200 {object} models.TokenPair
-// @Failure     400 {object} errorResponse
-// @Failure     401 {object} errorResponse
-// @Router      /api/auth/login [post]
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	var req loginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -66,16 +55,6 @@ type logoutRequest struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
-// Logout godoc
-// @Summary     Revoke refresh token
-// @Description Invalidates the supplied refresh token
-// @Tags        auth
-// @Accept      json
-// @Produce     json
-// @Param       body body logoutRequest true "Refresh token"
-// @Success     200 {object} map[string]string
-// @Failure     400 {object} errorResponse
-// @Router      /api/auth/logout [post]
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	var req logoutRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -87,7 +66,6 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Best-effort — don't expose errors to caller
 	_ = h.svc.Logout(r.Context(), req.RefreshToken)
 	writeJSON(w, http.StatusOK, map[string]string{"message": "logged out"})
 }
@@ -96,16 +74,6 @@ type refreshRequest struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
-// Refresh godoc
-// @Summary     Refresh access token
-// @Description Issues a new token pair, rotating the refresh token
-// @Tags        auth
-// @Accept      json
-// @Produce     json
-// @Param       body body refreshRequest true "Refresh token"
-// @Success     200 {object} models.TokenPair
-// @Failure     401 {object} errorResponse
-// @Router      /api/auth/refresh [post]
 func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 	var req refreshRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
