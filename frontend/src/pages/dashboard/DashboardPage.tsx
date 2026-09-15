@@ -1,7 +1,7 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { statsApi } from '../../api/endpoints'
-import { jobsApi } from '../../api/endpoints'
+import { statsApi, jobsApi } from '../../api/endpoints'
 import { PageSpinner, JobStatusBadge } from '../../components/ui'
 import { Files, CheckCircle2, AlertCircle, Clock, Cpu, Hash, Play } from 'lucide-react'
 import { formatDate } from '../../utils/format'
@@ -25,53 +25,16 @@ export default function DashboardPage() {
   const stats = statsQ.data
 
   const cards = [
-    {
-      label: 'کل فایل‌ها',
-      value: stats?.total_files ?? '—',
-      icon: Files,
-      color: 'bg-blue-50 text-blue-600',
-      to: '/files',
-    },
-    {
-      label: 'پردازش‌شده',
-      value: stats?.done_files ?? '—',
-      icon: CheckCircle2,
-      color: 'bg-green-50 text-green-600',
-      to: '/files?status=done',
-    },
-    {
-      label: 'خطا',
-      value: stats?.error_files ?? '—',
-      icon: AlertCircle,
-      color: 'bg-red-50 text-red-600',
-      to: '/files?status=error',
-    },
-    {
-      label: 'در انتظار',
-      value: stats?.pending_files ?? '—',
-      icon: Clock,
-      color: 'bg-yellow-50 text-yellow-600',
-      to: '/files?status=pending',
-    },
-    {
-      label: 'کل اسکن‌ها',
-      value: stats?.total_jobs ?? '—',
-      icon: Cpu,
-      color: 'bg-purple-50 text-purple-600',
-      to: '/jobs',
-    },
-    {
-      label: 'کل هدرها',
-      value: stats?.total_headers?.toLocaleString() ?? '—',
-      icon: Hash,
-      color: 'bg-gray-50 text-gray-600',
-      to: '/files',
-    },
+    { label: 'کل فایل‌ها',    value: stats?.total_files ?? '—',               icon: Files,         color: 'bg-blue-50 text-blue-600',   to: '/files' },
+    { label: 'پردازش‌شده',    value: stats?.done_files ?? '—',                icon: CheckCircle2,  color: 'bg-green-50 text-green-600', to: '/files?status=done' },
+    { label: 'خطا',            value: stats?.error_files ?? '—',               icon: AlertCircle,   color: 'bg-red-50 text-red-600',     to: '/files?status=error' },
+    { label: 'در انتظار',      value: stats?.pending_files ?? '—',             icon: Clock,         color: 'bg-yellow-50 text-yellow-600', to: '/files?status=pending' },
+    { label: 'کل اسکن‌ها',    value: stats?.total_jobs ?? '—',                icon: Cpu,           color: 'bg-purple-50 text-purple-600', to: '/jobs' },
+    { label: 'کل هدرها',       value: stats?.total_headers?.toLocaleString() ?? '—', icon: Hash,   color: 'bg-gray-50 text-gray-600',   to: '/files' },
   ]
 
   return (
     <div className="space-y-6">
-      {/* Page title */}
       <div>
         <h1 className="text-xl font-bold text-gray-900">داشبورد</h1>
         <p className="text-sm text-gray-500 mt-0.5">خلاصه وضعیت سیستم پردازش FITS</p>
@@ -81,22 +44,16 @@ export default function DashboardPage() {
       {stats?.running_jobs ? (
         <div className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-200 rounded-xl">
           <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse shrink-0" />
-          <p className="text-sm text-blue-800 font-medium">
-            {stats.running_jobs} اسکن در حال اجرا است
-          </p>
-          <Link to="/jobs" className="ml-auto text-sm text-blue-700 font-semibold hover:underline">
-            مشاهده →
-          </Link>
+          <p className="text-sm text-blue-800 font-medium">{stats.running_jobs} اسکن در حال اجرا است</p>
+          <Link to="/jobs" className="ml-auto text-sm text-blue-700 font-semibold hover:underline">مشاهده →</Link>
         </div>
       ) : null}
 
       {/* Stats grid */}
-      {statsQ.isLoading ? (
-        <PageSpinner />
-      ) : (
+      {statsQ.isLoading ? <PageSpinner /> : (
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           {cards.map(({ label, value, icon: Icon, color, to }) => (
-            <Link key={label} to={to} className="card p-5 hover:shadow-md transition-shadow group">
+            <Link key={label} to={to} className="card p-5 hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between">
                 <div>
                   <p className="text-xs text-gray-500 font-medium">{label}</p>
@@ -116,21 +73,13 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
           <h2 className="text-sm font-semibold text-gray-900">آخرین اسکن‌ها</h2>
           <div className="flex items-center gap-3">
-            {isAdmin && (
-              <ScanButton />
-            )}
-            <Link to="/jobs" className="text-sm text-brand-600 hover:text-brand-700 font-medium">
-              همه اسکن‌ها →
-            </Link>
+            {isAdmin && <ScanButton />}
+            <Link to="/jobs" className="text-sm text-brand-600 hover:text-brand-700 font-medium">همه اسکن‌ها →</Link>
           </div>
         </div>
 
-        {jobsQ.isLoading ? (
-          <PageSpinner />
-        ) : !jobsQ.data?.data?.length ? (
-          <div className="px-5 py-8 text-center text-sm text-gray-400">
-            هیچ اسکنی یافت نشد
-          </div>
+        {jobsQ.isLoading ? <PageSpinner /> : !jobsQ.data?.data?.length ? (
+          <div className="px-5 py-8 text-center text-sm text-gray-400">هیچ اسکنی یافت نشد</div>
         ) : (
           <table className="w-full">
             <thead>
@@ -143,10 +92,9 @@ export default function DashboardPage() {
               </tr>
             </thead>
             <tbody>
-              {jobsQ.data.data.map((job) => {
+              {jobsQ.data?.data.map((job) => {
                 const pct = job.total_files > 0
-                  ? Math.round(((job.done_files + job.error_files) / job.total_files) * 100)
-                  : 0
+                  ? Math.round(((job.done_files + job.error_files) / job.total_files) * 100) : 0
                 return (
                   <tr key={job.id} className="hover:bg-gray-50">
                     <td className="table-td font-mono text-gray-400 text-xs">#{job.id}</td>
@@ -162,16 +110,12 @@ export default function DashboardPage() {
                             style={{ width: `${pct}%` }}
                           />
                         </div>
-                        <span className="text-xs text-gray-500 shrink-0">
-                          {job.done_files}/{job.total_files}
-                        </span>
+                        <span className="text-xs text-gray-500 shrink-0">{job.done_files}/{job.total_files}</span>
                       </div>
                     </td>
                     <td className="table-td text-gray-500 text-xs">{formatDate(job.started_at)}</td>
                     <td className="table-td">
-                      <Link to={`/jobs/${job.id}`} className="text-brand-600 hover:text-brand-700 text-sm font-medium">
-                        جزئیات →
-                      </Link>
+                      <Link to={`/jobs/${job.id}`} className="text-brand-600 hover:text-brand-700 text-sm font-medium">جزئیات →</Link>
                     </td>
                   </tr>
                 )
@@ -187,7 +131,6 @@ export default function DashboardPage() {
 function ScanButton() {
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState('')
-  const { useState: _ } = { useState }
 
   const trigger = async () => {
     setLoading(true)
@@ -213,6 +156,3 @@ function ScanButton() {
     </div>
   )
 }
-
-// fix missing import
-import { useState } from 'react'

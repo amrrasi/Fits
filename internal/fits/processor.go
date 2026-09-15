@@ -256,4 +256,3 @@ func (p *Processor) processFile(ctx context.Context, jobID int64, path string) e
 	return nil
 }
 
-func strPtr(s string) *string { return &s }

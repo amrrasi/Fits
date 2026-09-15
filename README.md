@@ -1,89 +1,269 @@
 # FITS Processor
 
-A robust Go service that recursively scans directories for FITS (Flexible Image Transport System) files, parses every HDU header, and persists all data to PostgreSQL.
+A full-stack system for scanning, storing, and querying astronomical FITS file headers.
+Built with Go (backend API) and React (frontend).
 
 ---
 
-## Features
+## What it does
 
-- **Full header extraction** — every keyword from every HDU, stored in an EAV table (`fits_headers`)
-- **Typed fast-query table** — well-known keywords (RA, DEC, EXPTIME, WCS, temperatures …) stored as typed columns in `fits_metadata`
-- **Duplicate detection** — SHA-256 checksum prevents re-processing unchanged files
-- **Concurrent processing** — configurable worker pool
-- **Structured logging** — JSON logs to file + human-readable to stdout, separate error log file, daily rotation
-- **Database migrations** — versioned SQL files via `golang-migrate`
-- **12-factor config** — all settings via environment variables or `.env` file
+- Recursively scans a directory for `.fits` / `.fit` / `.fts` files
+- Parses every HDU header keyword and stores them in PostgreSQL
+- Extracts ~40 well-known typed fields (RA, DEC, EXPTIME, FILTER, temperatures, WCS…) into a fast-query metadata table
+- Provides a REST API with JWT authentication and role-based access (admin / editor / viewer)
+- Provides a React frontend with search, filtering, inline metadata editing, job monitoring, and user management
 
 ---
 
-## Project Structure
+## Project structure
 
 ```
-fits/
-├── cmd/
-│   └── fits-processor/
-│       └── main.go              # Entrypoint
+Fits/
+├── cmd/fits-processor/main.go     — application entrypoint
 ├── internal/
-│   ├── config/      config.go   # All env-var config loading
-│   ├── database/    database.go # PgxPool + migration runner
-│   ├── fits/
-│   │   ├── parser.go            # FITS file → ParseResult (headers + metadata)
-│   │   ├── scanner.go           # Recursive directory scanner
-│   │   └── processor.go         # Orchestrator: scan → parse → persist
-│   ├── logger/      logger.go   # Zap structured logger (file + console + errors)
-│   ├── models/      models.go   # Domain structs
-│   └── repository/  fits_repository.go  # All DB writes
-├── migrations/                  # Versioned SQL up/down files
-├── testdata/                    # Drop .fits files here for testing
-├── logs/                        # Created at runtime
-├── .env.example
+│   ├── api/          helpers.go   — shared HTTP response writers, pagination
+│   ├── auth/                      — JWT tokens, bcrypt, middleware, login/logout/refresh
+│   ├── config/       config.go    — all env-var loading + production validation
+│   ├── database/     database.go  — pgxpool connection + golang-migrate runner
+│   ├── fits/                      — scanner, parser (astrogo/fitsio), processor (worker pool)
+│   ├── fitshandler/  handler.go   — HTTP handlers for FITS data endpoints
+│   ├── fitsservice/  service.go   — FITS business logic (files, metadata, jobs, stats)
+│   ├── logger/       logger.go    — zap logger (file + error file + console)
+│   ├── middleware/   middleware.go — RequestID, Logger, SecurityHeaders, CORS, RateLimiter, MaxBodySize
+│   ├── models/                    — domain structs (FITSFile, FITSHeader, FITSMetadata, User, Job…)
+│   ├── repository/                — split DB access: file, header, metadata, job, user repositories
+│   ├── userhandler/  handler.go   — HTTP handlers for user management + audit log
+│   └── userservice/  service.go   — user management business logic
+├── migrations/                    — 006 versioned SQL migration files (up + down)
+├── frontend/                      — React 18 + TypeScript + Vite + Tailwind
+│   └── src/
+│       ├── api/       — typed Axios client with auto-refresh interceptor
+│       ├── components/— layout (sidebar, topbar, protected route), UI primitives
+│       ├── context/   — AuthContext, ToastContext
+│       ├── hooks/     — useDebounce
+│       ├── pages/     — Dashboard, Files, FileDetail, Jobs, JobDetail, Profile, Users, AuditLog
+│       └── types/     — TypeScript types mirroring Go models
+├── Dockerfile                     — 3-stage build (Go + Node + alpine)
+├── docker-compose.yml             — full stack (app + postgres)
+├── docker-compose.dev.yml         — dev override
 ├── Makefile
-└── go.mod
+└── .env.example
 ```
 
 ---
 
-## Quick Start
+## Running locally (Windows / Linux / macOS)
 
-### 1. Prerequisites
+### Prerequisites
 
-- Go 1.22+
-- PostgreSQL 14+
+Install these first:
 
-### 2. Configure
+| Tool | Download | Verify |
+|---|---|---|
+| Go 1.22+ | https://go.dev/dl/ | `go version` |
+| Node.js 20+ | https://nodejs.org | `node --version` |
+| PostgreSQL 14+ | https://postgresql.org/download | `psql --version` |
+| Git | https://git-scm.com | `git --version` |
+
+### Step 1 — Clone
+
+```bash
+git clone https://github.com/amrrasi/Fits.git
+cd Fits
+```
+
+### Step 2 — Create the database
+
+```bash
+# Linux / macOS
+sudo -u postgres psql -c "CREATE DATABASE fits_db;"
+sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'postgres';"
+
+# Windows — open pgAdmin or run in Command Prompt:
+psql -U postgres -c "CREATE DATABASE fits_db;"
+```
+
+### Step 3 — Configure
 
 ```bash
 cp .env.example .env
-# Edit .env — set DB_PASSWORD and FITS_SCAN_DIR at minimum
 ```
 
-### 3. Install dependencies
+Open `.env` and set at minimum:
+
+```env
+DB_PASSWORD=postgres          # your PostgreSQL password
+DB_NAME=fits_db
+FITS_SCAN_DIR=./testdata      # directory with .fits files
+JWT_ACCESS_SECRET=any-string-at-least-32-chars-long!!
+JWT_REFRESH_SECRET=different-string-at-least-32-chars!
+```
+
+### Step 4 — Download Go dependencies
 
 ```bash
 go mod tidy
 ```
 
-### 4. Create the database
-
-```sql
-CREATE DATABASE fits_db;
-```
-
-### 5. Run
+### Step 5 — Install frontend dependencies
 
 ```bash
-make run
-# or scan a specific directory:
-make run-dir DIR=/path/to/fits/files
-# or directly:
-go run ./cmd/fits-processor --env .env --scan-dir /data/fits
+cd frontend
+npm install
+cd ..
 ```
 
-Migrations are applied automatically on every startup.
+### Step 6 — Start the backend
+
+Open **Terminal 1**:
+
+```bash
+go run ./cmd/fits-processor --env .env --serve-only
+```
+
+Expected output:
+```
+database: connected to PostgreSQL
+database: migrations applied  version=6
+HTTP server listening  addr=:8080
+```
+
+### Step 7 — Start the frontend
+
+Open **Terminal 2**:
+
+```bash
+cd frontend
+npm run dev
+```
+
+Expected output:
+```
+VITE ready
+Local: http://localhost:3000
+```
+
+### Step 8 — Open the app
+
+Go to **http://localhost:3000** and log in with:
+
+| Field | Value |
+|---|---|
+| Email | `admin@fits.local` |
+| Password | `Admin@1234` |
+
+**Change this password immediately after first login.**
+
+### Step 9 — Scan your FITS files
+
+Copy `.fits` files into the `testdata/` folder, then open **Terminal 3**:
+
+```bash
+go run ./cmd/fits-processor --env .env
+```
+
+This scans, parses headers, and inserts everything into the database.
+You can also trigger a scan from the UI: Dashboard → شروع اسکن (admin only).
 
 ---
 
-## Configuration Reference
+## Make commands
+
+```bash
+make serve           # backend API only, no scan
+make run             # backend + scan on startup
+make run-dir DIR=/path/to/fits    # scan a specific directory
+make frontend-dev    # Vite dev server (port 3000)
+make test            # go test -race ./...
+make tidy            # go mod tidy + verify
+make docker-up       # full stack via docker-compose
+make docker-dev      # postgres only (app runs locally)
+make prod-build      # cross-compile Linux amd64 binary
+make clean           # remove bin/, logs/, frontend/dist/
+```
+
+---
+
+## Docker deployment
+
+```bash
+cp .env.example .env
+# Set DB_PASSWORD, JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, CORS_ALLOWED_ORIGINS
+
+docker-compose up -d
+```
+
+The Docker image:
+- Builds the Go binary and React app in one multi-stage Dockerfile
+- Serves the frontend from `/app/static` (SPA fallback to index.html)
+- Runs migrations automatically on startup
+- Runs as a non-root user
+- Health checks every 30 seconds
+
+---
+
+## API endpoints
+
+### Public
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/health` | Liveness check |
+| `GET` | `/ready` | Readiness check |
+| `POST` | `/api/auth/login` | Login → returns token pair |
+| `POST` | `/api/auth/logout` | Revoke refresh token |
+| `POST` | `/api/auth/refresh` | Rotate token pair |
+
+### FITS data (any authenticated role)
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/files` | List files — search, filter, sort, paginate |
+| `GET` | `/api/files/{id}` | Single file detail |
+| `GET` | `/api/files/{id}/headers` | Paginated raw headers |
+| `GET` | `/api/files/{id}/metadata` | Typed metadata |
+| `GET` | `/api/files/{id}/metadata/history` | Edit history |
+| `GET` | `/api/jobs` | List processing jobs |
+| `GET` | `/api/jobs/{id}` | Job detail |
+| `GET` | `/api/jobs/{id}/errors` | Job error list |
+| `GET` | `/api/jobs/{id}/status` | Lightweight status poll |
+| `GET` | `/api/stats` | Dashboard summary counts |
+
+### Editor + Admin
+
+| Method | Path | Description |
+|---|---|---|
+| `PUT` | `/api/files/{id}/metadata` | Edit one metadata field |
+
+### Admin only
+
+| Method | Path | Description |
+|---|---|---|
+| `DELETE` | `/api/files/{id}` | Delete file and all data |
+| `POST` | `/api/scan` | Trigger a new scan |
+| `GET` | `/api/users` | List users |
+| `POST` | `/api/users` | Create user |
+| `GET` | `/api/users/{id}` | Get user |
+| `PUT` | `/api/users/{id}` | Edit user |
+| `DELETE` | `/api/users/{id}` | Delete user |
+| `PUT` | `/api/users/{id}/password` | Reset user password |
+| `GET` | `/api/users/me` | Own profile |
+| `PUT` | `/api/users/me/password` | Change own password |
+| `GET` | `/api/audit-logs` | System audit log |
+
+---
+
+## User roles
+
+| Role | View data | Edit metadata | Manage users | Delete files | Trigger scan |
+|---|---|---|---|---|---|
+| viewer | ✅ | ❌ | ❌ | ❌ | ❌ |
+| editor | ✅ | ✅ | ❌ | ❌ | ❌ |
+| admin  | ✅ | ✅ | ✅ | ✅ | ✅ |
+
+---
+
+## Environment variables
 
 | Variable | Default | Description |
 |---|---|---|
@@ -92,33 +272,39 @@ Migrations are applied automatically on every startup.
 | `DB_USER` | `postgres` | Database user |
 | `DB_PASSWORD` | _(required in prod)_ | Database password |
 | `DB_NAME` | `fits_db` | Database name |
-| `DB_SSLMODE` | `disable` | `disable` / `require` / `verify-full` |
-| `LOG_LEVEL` | `info` | `debug` / `info` / `warn` / `error` |
-| `LOG_DIR` | `logs` | Directory for log files |
-| `FITS_SCAN_DIR` | `./testdata` | Root directory to scan |
+| `DB_SSLMODE` | `disable` | `disable` / `require` |
+| `JWT_ACCESS_SECRET` | _(insecure default)_ | Min 32 chars in production |
+| `JWT_REFRESH_SECRET` | _(insecure default)_ | Min 32 chars in production |
+| `JWT_ACCESS_TTL` | `15m` | Access token lifetime |
+| `JWT_REFRESH_TTL` | `168h` | Refresh token lifetime |
+| `SERVER_ADDR` | `:8080` | HTTP listen address |
+| `CORS_ALLOWED_ORIGINS` | `http://localhost:3000` | Comma-separated allowed origins |
+| `RATE_LIMIT_AUTH_RPS` | `5` | Auth endpoint rate limit (req/s per IP) |
+| `RATE_LIMIT_API_RPS` | `60` | API rate limit (req/s per IP) |
+| `MAX_BODY_BYTES` | `1048576` | Request body size limit (1 MB) |
+| `STATIC_DIR` | _(empty)_ | Serve frontend from this path (production) |
+| `FITS_SCAN_DIR` | `./testdata` | Directory to scan for FITS files |
 | `FITS_WORKERS` | `4` | Parallel processing goroutines |
+| `APP_ENV` | `development` | `development` / `production` |
+| `LOG_LEVEL` | `info` | `debug` / `info` / `warn` / `error` |
+| `LOG_DIR` | `logs` | Log file directory |
 | `MIGRATIONS_DIR` | `migrations` | Path to SQL migration files |
 
 ---
 
-## Database Schema
+## Database tables
 
 | Table | Purpose |
 |---|---|
-| `fits_files` | One row per file — path, checksum, status |
+| `fits_files` | One row per FITS file (path, checksum, status, timing) |
 | `fits_headers` | EAV — every raw keyword from every HDU |
-| `fits_metadata` | Typed flat table for fast range queries |
+| `fits_metadata` | Typed flat table (~40 columns) for fast science queries |
+| `metadata_overrides` | Audit trail of every metadata field edit |
 | `processing_jobs` | One row per scan run with progress counters |
-| `processing_errors` | Per-file failure records |
-
----
-
-## Adding New Keywords
-
-1. Add column to a new migration SQL file
-2. Add field to `internal/models/models.go` → `FITSMetadata`
-3. Add `case "KEYWORD":` in `internal/fits/parser.go` → `populateMetadata()`
-4. Add column to INSERT/UPDATE in `internal/repository/fits_repository.go` → `UpsertMetadata()`
+| `processing_errors` | Per-file failure records linked to a job |
+| `users` | User accounts with role (admin/editor/viewer) |
+| `sessions` | Refresh token store (stored as SHA-256 hash) |
+| `audit_logs` | System-wide audit log for all actions |
 
 ---
 
@@ -129,345 +315,4 @@ Migrations are applied automatically on every startup.
 | `logs/fits-processor-YYYY-MM-DD.log` | All levels — JSON |
 | `logs/fits-processor-YYYY-MM-DD.error.log` | Errors only — JSON |
 
-Console output is human-readable. Set `LOG_LEVEL=debug` for per-keyword detail.
-
----
-
-## Phase 2 — Authentication & User System
-
-### Default admin account
-
-| Field | Value |
-|---|---|
-| Email | `admin@fits.local` |
-| Password | `Admin@1234` |
-| Role | `admin` |
-
-**Change the password immediately after first login.**
-
-### Auth endpoints
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| `POST` | `/api/auth/login` | Public | Returns access + refresh token |
-| `POST` | `/api/auth/logout` | Public | Revokes refresh token |
-| `POST` | `/api/auth/refresh` | Public | Issues new token pair (rotates refresh token) |
-| `GET` | `/health` | Public | Health check |
-| `GET` | `/api/me` | Bearer token | Returns current user info |
-
-### Login example
-
-```bash
-curl -s -X POST http://localhost:8080/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"admin@fits.local","password":"Admin@1234"}' | jq
-```
-
-Response:
-```json
-{
-  "access_token": "eyJ...",
-  "refresh_token": "550e8400-...",
-  "expires_at": "2026-01-01T00:15:00Z",
-  "user": { "id": 1, "email": "admin@fits.local", "role": "admin" }
-}
-```
-
-### Using the access token
-
-```bash
-curl -H "Authorization: Bearer eyJ..." http://localhost:8080/api/me
-```
-
-### Token lifecycle
-
-- **Access token** — short-lived (15 min), stateless JWT, validated on every request
-- **Refresh token** — long-lived (7 days), stored as SHA-256 hash in `sessions` table
-- **Refresh rotation** — every refresh call deletes the old session and issues a new pair
-
-### JWT environment variables
-
-| Variable | Default | Description |
-|---|---|---|
-| `JWT_ACCESS_SECRET` | _(insecure default)_ | HMAC signing key for access tokens |
-| `JWT_REFRESH_SECRET` | _(insecure default)_ | HMAC signing key for refresh tokens |
-| `JWT_ACCESS_TTL` | `15m` | Access token lifetime |
-| `JWT_REFRESH_TTL` | `168h` | Refresh token lifetime (7 days) |
-| `SERVER_ADDR` | `:8080` | HTTP listen address |
-
-### Running the server
-
-```bash
-# Start HTTP server + run a FITS scan on startup
-make run
-
-# Start HTTP server only (no scan)
-make serve
-
-# Start with a specific scan directory
-make run-dir DIR=/data/fits
-```
-
----
-
-## Phase 3 — User & Role Management API
-
-### Roles
-
-| Role | Can view data | Can edit FITS metadata | Can manage users |
-|---|---|---|---|
-| `viewer` | ✅ | ❌ | ❌ |
-| `editor` | ✅ | ✅ | ❌ |
-| `admin`  | ✅ | ✅ | ✅ |
-
-### User endpoints
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| `GET` | `/api/users/me` | Any role | Own profile |
-| `PUT` | `/api/users/me/password` | Any role | Change own password |
-| `GET` | `/api/users` | Admin | List users (paginated + search) |
-| `POST` | `/api/users` | Admin | Create user |
-| `GET` | `/api/users/{id}` | Admin | Get user by ID |
-| `PUT` | `/api/users/{id}` | Admin | Edit name, role, active status |
-| `DELETE` | `/api/users/{id}` | Admin | Delete user |
-| `PUT` | `/api/users/{id}/password` | Admin | Reset any user's password |
-
-### Query params for `GET /api/users`
-
-| Param | Example | Description |
-|---|---|---|
-| `page` | `1` | Page number |
-| `page_size` | `20` | Items per page (max 100) |
-| `search` | `reza` | Partial match on email or name |
-| `role` | `editor` | Filter by role |
-| `active` | `true` | Filter active/inactive |
-
-### Examples
-
-```bash
-# List all users
-curl -H "Authorization: Bearer TOKEN" http://localhost:8080/api/users
-
-# Search users
-curl -H "Authorization: Bearer TOKEN" \
-  "http://localhost:8080/api/users?search=reza&role=editor&page=1&page_size=10"
-
-# Create a new editor
-curl -X POST http://localhost:8080/api/users \
-  -H "Authorization: Bearer TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"email":"reza@fits.local","password":"Secret@123","full_name":"Reza","role":"editor"}'
-
-# Edit user role
-curl -X PUT http://localhost:8080/api/users/2 \
-  -H "Authorization: Bearer TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"full_name":"Reza Updated","role":"viewer","is_active":true}'
-
-# Change own password
-curl -X PUT http://localhost:8080/api/users/me/password \
-  -H "Authorization: Bearer TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"old_password":"Admin@1234","new_password":"NewPass@456"}'
-
-# Admin reset another user password
-curl -X PUT http://localhost:8080/api/users/2/password \
-  -H "Authorization: Bearer TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"new_password":"Reset@789"}'
-
-# Delete user
-curl -X DELETE http://localhost:8080/api/users/2 \
-  -H "Authorization: Bearer TOKEN"
-```
-
-### Safety rules
-- You cannot delete your own account
-- You cannot delete or demote the last active admin
-- Passwords must be at least 8 characters
-- Emails must be unique across the system
-
----
-
-## Phase 4 — FITS Data REST API
-
-### All endpoints
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| `GET` | `/health` | Public | Liveness check |
-| `GET` | `/ready` | Public | Readiness check |
-| `GET` | `/api/files` | Any role | List FITS files (paginated + filters) |
-| `GET` | `/api/files/{id}` | Any role | Single file detail |
-| `DELETE` | `/api/files/{id}` | Admin | Delete file and all related data |
-| `GET` | `/api/files/{id}/headers` | Any role | Paginated raw headers (EAV) |
-| `GET` | `/api/files/{id}/metadata` | Any role | Typed metadata |
-| `PUT` | `/api/files/{id}/metadata` | Editor/Admin | Edit one metadata field |
-| `GET` | `/api/files/{id}/metadata/history` | Any role | Full edit history |
-| `GET` | `/api/jobs` | Any role | List processing jobs |
-| `GET` | `/api/jobs/{id}` | Any role | Job detail |
-| `GET` | `/api/jobs/{id}/errors` | Any role | Errors for a job |
-| `GET` | `/api/jobs/{id}/status` | Any role | Lightweight status poll |
-| `POST` | `/api/scan` | Admin | Trigger a new scan |
-
-### Query params for `GET /api/files`
-
-| Param | Example | Description |
-|---|---|---|
-| `page` | `1` | Page number |
-| `page_size` | `20` | Items per page (max 100) |
-| `search` | `m31` | Partial match on file name |
-| `status` | `done` | `pending/processing/done/error/skipped` |
-| `sort` | `file_size` | `created_at/file_name/file_size/processed_at` |
-| `order` | `asc` | `asc` or `desc` |
-| `date_from` | `2024-01-01` | Created at or after (YYYY-MM-DD) |
-| `date_to` | `2024-12-31` | Created at or before (YYYY-MM-DD) |
-
-### Query params for `GET /api/files/{id}/headers`
-
-| Param | Example | Description |
-|---|---|---|
-| `page` | `1` | Page number |
-| `page_size` | `100` | Items per page |
-| `search` | `exptime` | Partial match on keyword or value |
-| `hdu_index` | `0` | Filter to one HDU |
-
-### Edit metadata example
-
-```bash
-curl -X PUT http://localhost:8080/api/files/1/metadata \
-  -H "Authorization: Bearer TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "field_name": "object",
-    "new_value": "M31 Andromeda",
-    "reason": "correcting object name from original header"
-  }'
-```
-
-Editable fields: `object`, `observer`, `telescop`, `instrume`, `filter`, `filter_id`, `origin`, `software`, `equip_id`, `ra`, `dec`, `airmass`, `site_lat`, `site_lon`, `site_elev`, `exptime`, `gain`, `rdnoise`, `set_temp`, `ccd_temp`, `amb_temp`, `date_obs`, `time_obs`
-
-Raw `fits_headers` are **never modified** — every edit is recorded in `metadata_overrides` with the old value, new value, editor, and optional reason.
-
-### Trigger a scan
-
-```bash
-curl -X POST http://localhost:8080/api/scan \
-  -H "Authorization: Bearer TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"scan_dir": "/data/fits"}'
-```
-
-Returns `{"job_id": 42, "scan_dir": "/data/fits", "message": "scan started"}` immediately. Poll `GET /api/jobs/42/status` for progress.
-
-### Architecture improvements in Phase 4
-
-- Repository split: `FileRepository`, `HeaderRepository`, `MetadataRepository`, `JobRepository`
-- Every file ingestion wrapped in a single PostgreSQL transaction — no partial data on failure
-- Job status expanded: `completed | partially_failed | failed | cancelled`
-- `processing_ms` recorded per file and per job
-- `metadata_overrides` table — full audit trail of every metadata edit
-- `audit_logs` table — system-wide audit log for all actions
-- Partial indexes and composite indexes for common query patterns
-
----
-
-## Phase 8 — Production Readiness
-
-### Middleware stack (applied to every request)
-
-```
-RequestID → Logger → SecurityHeaders → CORS → MaxBodySize → mux
-```
-
-| Middleware | What it does |
-|---|---|
-| `RequestID` | Generates UUID per request, injects into context + `X-Request-ID` header |
-| `Logger` | Logs method, path, status, duration, IP, request ID for every non-health request |
-| `SecurityHeaders` | Sets `X-Content-Type-Options`, `X-Frame-Options`, `X-XSS-Protection`, `Referrer-Policy` |
-| `CORS` | Validates `Origin` header against `CORS_ALLOWED_ORIGINS`, handles preflight |
-| `MaxBodySize` | Limits request bodies to `MAX_BODY_BYTES` (default 1 MB) |
-
-### Rate limiting
-
-Two separate token-bucket limiters per IP:
-
-| Scope | Variable | Default |
-|---|---|---|
-| Auth endpoints (`/api/auth/*`) | `RATE_LIMIT_AUTH_RPS` | 5 req/s, burst 10 |
-| All other API endpoints | `RATE_LIMIT_API_RPS` | 60 req/s, burst 120 |
-
-Returns `429 Too Many Requests` with `Retry-After: 1` when exceeded.
-
-### Production config validation
-
-The app **refuses to start** in production (`APP_ENV=production`) if:
-- `DB_PASSWORD` is empty
-- `JWT_ACCESS_SECRET` or `JWT_REFRESH_SECRET` is the insecure default
-- Either JWT secret is shorter than 32 characters
-
-Generate strong secrets:
-```bash
-openssl rand -base64 48
-```
-
-### Docker deployment
-
-**Quick start with Docker Compose:**
-```bash
-cp .env.example .env
-# Edit .env with your real DB_PASSWORD and JWT secrets
-
-docker-compose up -d
-```
-
-The container:
-- Runs migrations automatically on startup
-- Serves the built React frontend from `/app/static` (SPA fallback to index.html)
-- Runs a health check every 30 seconds on `GET /health`
-- Runs as a non-root user (`fits`)
-
-**Build and push manually:**
-```bash
-make docker-build
-docker tag fits-processor:latest your-registry/fits-processor:v1.0.0
-docker push your-registry/fits-processor:v1.0.0
-```
-
-**Useful Make targets:**
-```bash
-make serve           # backend only, no scan
-make frontend-dev    # Vite dev server on :3000
-make docker-up       # full stack via docker-compose
-make docker-logs     # tail container logs
-make docker-dev      # postgres only (app runs locally)
-make prod-build      # cross-compile Linux binary
-make test            # go test -race ./...
-```
-
-### Static frontend serving (production)
-
-In production the Go binary serves the built React app:
-```bash
-# 1. Build frontend
-make frontend-build          # outputs to frontend/dist/
-
-# 2. Set in .env
-STATIC_DIR=./frontend/dist
-
-# 3. Run (serves API + frontend from single binary on :8080)
-make serve
-```
-
-All unknown paths return `index.html` for React Router to handle (SPA fallback).
-
-### Security headers sent on every response
-
-| Header | Value |
-|---|---|
-| `X-Content-Type-Options` | `nosniff` |
-| `X-Frame-Options` | `DENY` |
-| `X-XSS-Protection` | `1; mode=block` |
-| `Referrer-Policy` | `strict-origin-when-cross-origin` |
-| `Permissions-Policy` | `camera=(), microphone=(), geolocation=()` |
+Console output is human-readable. Set `LOG_LEVEL=debug` for per-file and per-keyword detail.

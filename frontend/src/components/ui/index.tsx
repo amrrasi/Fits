@@ -1,3 +1,4 @@
+import React from 'react'
 import { Loader2, AlertCircle, Inbox, ChevronLeft, ChevronRight } from 'lucide-react'
 import type { FileStatus, JobStatus } from '../../types'
 import clsx from 'clsx'
