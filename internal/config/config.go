@@ -1,6 +1,3 @@
-// Package config loads all application settings from environment variables
-// (optionally from a .env file). Every external setting lives here — nothing
-// else in the codebase reads os.Getenv directly.
 package config
 
 import (
@@ -13,7 +10,6 @@ import (
 	"github.com/joho/godotenv"
 )
 
-// Config holds every application setting.
 type Config struct {
 	DB   DBConfig
 	Log  LogConfig
@@ -23,7 +19,6 @@ type Config struct {
 	HTTP HTTPConfig
 }
 
-// DBConfig holds PostgreSQL connection parameters.
 type DBConfig struct {
 	Host            string
 	Port            int
@@ -50,28 +45,24 @@ func (d DBConfig) PgxDSN() string {
 	)
 }
 
-// LogConfig controls the structured logger.
 type LogConfig struct {
 	Level       string
 	Dir         string
 	Development bool
 }
 
-// FITSConfig controls FITS file scanning and processing.
 type FITSConfig struct {
 	ScanDir   string
 	Workers   int
 	BatchSize int
 }
 
-// AppConfig holds general application metadata.
 type AppConfig struct {
 	Name          string
-	Environment   string // development | staging | production
+	Environment   string 
 	MigrationsDir string
 }
 
-// JWTConfig holds signing secrets and token lifetimes.
 type JWTConfig struct {
 	AccessSecret  string
 	RefreshSecret string
@@ -79,29 +70,21 @@ type JWTConfig struct {
 	RefreshTTL    time.Duration
 }
 
-// HTTPConfig holds HTTP server and security settings.
 type HTTPConfig struct {
-	Addr string // listen address, e.g. ":8080"
+	Addr string
 
-	// CORS — comma-separated list of allowed origins.
-	// Use "*" in development only. In production list exact origins.
 	CORSAllowedOrigins []string
 
-	// Rate limiting — requests per second per IP
-	RateLimitAuthRPS  float64 // auth endpoints (login, refresh)
+	RateLimitAuthRPS  float64
 	RateLimitAuthBurst float64
-	RateLimitAPIRPS   float64 // all other API endpoints
+	RateLimitAPIRPS   float64
 	RateLimitAPIBurst float64
 
-	// Request body size limit in bytes (default 1 MB)
 	MaxBodyBytes int64
 
-	// StaticDir is the path to the compiled frontend (served in production).
-	// Leave empty to disable static file serving.
 	StaticDir string
 }
 
-// insecureDefaults are the placeholder secrets that must not be used in production.
 var insecureDefaults = []string{
 	"change-me-access-secret-32chars!!",
 	"change-me-refresh-secret-32chars!",
@@ -109,7 +92,6 @@ var insecureDefaults = []string{
 	"change-me-refresh-secret-min-32-chars!",
 }
 
-// Load reads configuration from the environment (and optional .env file).
 func Load(envFile string) (*Config, error) {
 	if envFile != "" {
 		_ = godotenv.Load(envFile)
@@ -117,7 +99,6 @@ func Load(envFile string) (*Config, error) {
 
 	cfg := &Config{}
 
-	// ── Database ──────────────────────────────────────────────────────────────
 	cfg.DB = DBConfig{
 		Host:            getEnv("DB_HOST", "localhost"),
 		Port:            getEnvInt("DB_PORT", 5432),
@@ -130,21 +111,18 @@ func Load(envFile string) (*Config, error) {
 		ConnMaxLifetime: getEnvDuration("DB_CONN_MAX_LIFETIME", 5*time.Minute),
 	}
 
-	// ── Logging ───────────────────────────────────────────────────────────────
 	cfg.Log = LogConfig{
 		Level:       getEnv("LOG_LEVEL", "info"),
 		Dir:         getEnv("LOG_DIR", "logs"),
 		Development: getEnvBool("LOG_DEVELOPMENT", false),
 	}
 
-	// ── FITS processing ───────────────────────────────────────────────────────
 	cfg.FITS = FITSConfig{
 		ScanDir:   getEnv("FITS_SCAN_DIR", "./testdata"),
 		Workers:   getEnvInt("FITS_WORKERS", 4),
 		BatchSize: getEnvInt("FITS_BATCH_SIZE", 100),
 	}
 
-	// ── JWT ───────────────────────────────────────────────────────────────────
 	cfg.JWT = JWTConfig{
 		AccessSecret:  getEnv("JWT_ACCESS_SECRET", "change-me-access-secret-32chars!!"),
 		RefreshSecret: getEnv("JWT_REFRESH_SECRET", "change-me-refresh-secret-32chars!"),
@@ -152,14 +130,12 @@ func Load(envFile string) (*Config, error) {
 		RefreshTTL:    getEnvDuration("JWT_REFRESH_TTL", 7*24*time.Hour),
 	}
 
-	// ── Application ───────────────────────────────────────────────────────────
 	cfg.App = AppConfig{
 		Name:          getEnv("APP_NAME", "fits-processor"),
 		Environment:   getEnv("APP_ENV", "development"),
 		MigrationsDir: getEnv("MIGRATIONS_DIR", "migrations"),
 	}
 
-	// ── HTTP / Security ───────────────────────────────────────────────────────
 	rawOrigins := getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
 	var origins []string
 	for _, o := range strings.Split(rawOrigins, ",") {
@@ -199,7 +175,6 @@ func (c *Config) validate() error {
 		return fmt.Errorf("FITS_BATCH_SIZE must be >= 1")
 	}
 
-	// Refuse to start in production with insecure JWT defaults
 	if isProd {
 		for _, bad := range insecureDefaults {
 			if c.JWT.AccessSecret == bad {
@@ -220,7 +195,6 @@ func (c *Config) validate() error {
 	return nil
 }
 
-// ── helpers ───────────────────────────────────────────────────────────────────
 
 func getEnv(key, fallback string) string {
 	if v, ok := os.LookupEnv(key); ok {
