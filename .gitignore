@@ -24,3 +24,8 @@ vendor/
 testdata/*.fits
 testdata/*.fit
 testdata/*.fts
+
+# Production secrets — never commit these
+.env.production
+.env.staging
+docker-compose.override.yml

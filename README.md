@@ -370,3 +370,104 @@ Returns `{"job_id": 42, "scan_dir": "/data/fits", "message": "scan started"}` im
 - `metadata_overrides` table — full audit trail of every metadata edit
 - `audit_logs` table — system-wide audit log for all actions
 - Partial indexes and composite indexes for common query patterns
+
+---
+
+## Phase 8 — Production Readiness
+
+### Middleware stack (applied to every request)
+
+```
+RequestID → Logger → SecurityHeaders → CORS → MaxBodySize → mux
+```
+
+| Middleware | What it does |
+|---|---|
+| `RequestID` | Generates UUID per request, injects into context + `X-Request-ID` header |
+| `Logger` | Logs method, path, status, duration, IP, request ID for every non-health request |
+| `SecurityHeaders` | Sets `X-Content-Type-Options`, `X-Frame-Options`, `X-XSS-Protection`, `Referrer-Policy` |
+| `CORS` | Validates `Origin` header against `CORS_ALLOWED_ORIGINS`, handles preflight |
+| `MaxBodySize` | Limits request bodies to `MAX_BODY_BYTES` (default 1 MB) |
+
+### Rate limiting
+
+Two separate token-bucket limiters per IP:
+
+| Scope | Variable | Default |
+|---|---|---|
+| Auth endpoints (`/api/auth/*`) | `RATE_LIMIT_AUTH_RPS` | 5 req/s, burst 10 |
+| All other API endpoints | `RATE_LIMIT_API_RPS` | 60 req/s, burst 120 |
+
+Returns `429 Too Many Requests` with `Retry-After: 1` when exceeded.
+
+### Production config validation
+
+The app **refuses to start** in production (`APP_ENV=production`) if:
+- `DB_PASSWORD` is empty
+- `JWT_ACCESS_SECRET` or `JWT_REFRESH_SECRET` is the insecure default
+- Either JWT secret is shorter than 32 characters
+
+Generate strong secrets:
+```bash
+openssl rand -base64 48
+```
+
+### Docker deployment
+
+**Quick start with Docker Compose:**
+```bash
+cp .env.example .env
+# Edit .env with your real DB_PASSWORD and JWT secrets
+
+docker-compose up -d
+```
+
+The container:
+- Runs migrations automatically on startup
+- Serves the built React frontend from `/app/static` (SPA fallback to index.html)
+- Runs a health check every 30 seconds on `GET /health`
+- Runs as a non-root user (`fits`)
+
+**Build and push manually:**
+```bash
+make docker-build
+docker tag fits-processor:latest your-registry/fits-processor:v1.0.0
+docker push your-registry/fits-processor:v1.0.0
+```
+
+**Useful Make targets:**
+```bash
+make serve           # backend only, no scan
+make frontend-dev    # Vite dev server on :3000
+make docker-up       # full stack via docker-compose
+make docker-logs     # tail container logs
+make docker-dev      # postgres only (app runs locally)
+make prod-build      # cross-compile Linux binary
+make test            # go test -race ./...
+```
+
+### Static frontend serving (production)
+
+In production the Go binary serves the built React app:
+```bash
+# 1. Build frontend
+make frontend-build          # outputs to frontend/dist/
+
+# 2. Set in .env
+STATIC_DIR=./frontend/dist
+
+# 3. Run (serves API + frontend from single binary on :8080)
+make serve
+```
+
+All unknown paths return `index.html` for React Router to handle (SPA fallback).
+
+### Security headers sent on every response
+
+| Header | Value |
+|---|---|
+| `X-Content-Type-Options` | `nosniff` |
+| `X-Frame-Options` | `DENY` |
+| `X-XSS-Protection` | `1; mode=block` |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` |
+| `Permissions-Policy` | `camera=(), microphone=(), geolocation=()` |

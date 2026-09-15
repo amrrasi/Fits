@@ -1,0 +1,24 @@
+version: "3.9"
+
+# Development override — use with:
+#   docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  db:
+    ports:
+      - "5432:5432"   # expose for pgAdmin / local tools
+
+  app:
+    build:
+      target: builder   # stop at the Go build stage (no frontend)
+    environment:
+      APP_ENV:    development
+      LOG_LEVEL:  debug
+      LOG_DEVELOPMENT: "true"
+      CORS_ALLOWED_ORIGINS: "http://localhost:3000,http://localhost:5173"
+      STATIC_DIR: ""  # don't serve static in dev (Vite does it)
+    # Override CMD to also scan on startup
+    command: ["./fits-processor", "--env", "/app/.env"]
+    volumes:
+      - ./testdata:/data/fits
+      - ./logs:/app/logs
