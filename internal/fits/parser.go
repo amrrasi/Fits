@@ -38,7 +38,14 @@ func ParseFile(path string) (*ParseResult, error) {
 	}
 
 	// ── Open FITS ──────────────────────────────────────────────────────────────
-	f, err := fitsio.Open(path)
+	// fitsio.Open requires an io.Reader, not a path — open the OS file first.
+	osFile, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("fits: open %q: %w", path, err)
+	}
+	defer osFile.Close()
+
+	f, err := fitsio.Open(osFile)
 	if err != nil {
 		return nil, fmt.Errorf("fits: open %q: %w", path, err)
 	}
@@ -66,8 +73,10 @@ func ParseFile(path string) (*ParseResult, error) {
 		hduName := hduName(hdu, hduIdx)
 		log.Debugw("fits: processing HDU", "index", hduIdx, "name", hduName)
 
-		cards := hdu.Header().Cards()
-		for _, card := range cards {
+		hdr := hdu.Header()
+		keys := hdr.Keys()
+		for k := range keys {
+			card := hdr.Card(k)
 			keyword := strings.TrimSpace(card.Name)
 			if keyword == "" || keyword == "COMMENT" || keyword == "HISTORY" {
 				// Still store them but skip metadata extraction
@@ -108,8 +117,10 @@ func hduName(hdu fitsio.HDU, idx int) string {
 		return "PRIMARY"
 	}
 	// Try EXTNAME keyword
-	cards := hdu.Header().Cards()
-	for _, c := range cards {
+	hdr := hdu.Header()
+	keys := hdr.Keys()
+	for k := range keys {
+		c := hdr.Card(k)
 		if strings.TrimSpace(c.Name) == "EXTNAME" {
 			if s, ok := c.Value.(string); ok && s != "" {
 				return strings.TrimSpace(s)
