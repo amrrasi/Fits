@@ -59,7 +59,7 @@ type FITSConfig struct {
 
 type AppConfig struct {
 	Name          string
-	Environment   string 
+	Environment   string
 	MigrationsDir string
 }
 

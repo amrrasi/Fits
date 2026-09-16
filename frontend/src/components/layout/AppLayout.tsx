@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import {
-  LayoutDashboard, Files, Cpu, Users, LogOut, Star, ChevronRight, UserCircle, Shield
+  LayoutDashboard, Files, Cpu, Users, LogOut, Star, ChevronLeft, UserCircle, Shield
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import clsx from 'clsx'
@@ -120,7 +120,7 @@ export default function AppLayout() {
         <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2 text-sm text-gray-500">
             <span>FITS Processor</span>
-            <ChevronRight className="w-3 h-3" />
+            <ChevronLeft className="w-3.5 h-3.5 text-gray-300" />
             <span className="text-gray-900 font-medium">{crumb}</span>
           </div>
           <NavLink

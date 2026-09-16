@@ -6,6 +6,9 @@
   * {
     @apply border-gray-200;
   }
+  html {
+    font-feature-settings: 'ss01' 1;
+  }
   body {
     @apply bg-gray-50 text-gray-900 antialiased;
   }
@@ -48,10 +51,20 @@
   .badge-blue   { @apply badge bg-blue-100 text-blue-800; }
   .badge-gray   { @apply badge bg-gray-100 text-gray-700; }
   .table-th {
-    @apply px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider
+    @apply px-4 py-3 text-start text-xs font-semibold text-gray-500 uppercase tracking-wider
            bg-gray-50 border-b border-gray-200;
   }
   .table-td {
     @apply px-4 py-3 text-sm text-gray-700 border-b border-gray-100;
   }
+
+  /* For embedding inherently-LTR content (file paths, hashes, ISO dates,
+     hex/numeric identifiers) inside an RTL page without the bidi algorithm
+     reordering punctuation/slashes. Use on any such value across the app. */
+  .ltr {
+    direction: ltr;
+    unicode-bidi: isolate;
+    text-align: start;
+  }
 }
+

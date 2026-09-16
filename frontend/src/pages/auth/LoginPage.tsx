@@ -28,19 +28,23 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
-      <div className="w-full max-w-sm">
+    <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4 relative overflow-hidden">
+      {/* Ambient glow */}
+      <div className="absolute -top-40 -start-40 w-96 h-96 bg-brand-600/20 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-40 -end-40 w-96 h-96 bg-brand-500/10 rounded-full blur-3xl pointer-events-none" />
+
+      <div className="w-full max-w-sm relative">
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <div className="w-12 h-12 bg-brand-600 rounded-xl flex items-center justify-center mb-3 shadow-lg">
+          <div className="w-12 h-12 bg-brand-600 rounded-xl flex items-center justify-center mb-3 shadow-lg shadow-brand-600/30">
             <Star className="w-6 h-6 text-white" />
           </div>
-          <h1 className="text-xl font-bold text-white">FITS Processor</h1>
-          <p className="text-gray-400 text-sm mt-1">سیستم مدیریت داده‌های نجومی</p>
+          <h1 className="text-xl font-bold text-white">سامانه پردازش فایل‌های FITS</h1>
+          <p className="text-gray-400 text-sm mt-1">مدیریت داده‌های نجومی</p>
         </div>
 
         {/* Card */}
-        <div className="bg-gray-900 rounded-2xl border border-gray-800 p-6 shadow-xl">
+        <div className="bg-gray-900/80 backdrop-blur-sm rounded-2xl border border-gray-800 p-6 shadow-2xl">
           <h2 className="text-base font-semibold text-white mb-5">ورود به حساب کاربری</h2>
 
           <form onSubmit={handleSubmit} className="space-y-4">
