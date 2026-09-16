@@ -46,10 +46,10 @@ export default function UserDetailPage() {
     <div className="max-w-2xl space-y-5">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Link to="/users" className="text-gray-400 hover:text-gray-600">
+        <Link to="/users" className="text-gray-400 dark:text-gray-500 hover:text-gray-600">
           <ArrowLeft className="w-5 h-5" />
         </Link>
-        <h1 className="text-xl font-bold text-gray-900 flex-1">جزئیات کاربر</h1>
+        <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex-1">جزئیات کاربر</h1>
         <div className="flex gap-2">
           <button onClick={() => setShowEdit(true)} className="btn-secondary">
             <Pencil className="w-4 h-4" /> ویرایش
@@ -67,7 +67,7 @@ export default function UserDetailPage() {
 
       {/* Profile card */}
       <div className="card p-6">
-        <div className="flex items-center gap-5 pb-5 border-b border-gray-100">
+        <div className="flex items-center gap-5 pb-5 border-b border-gray-100 dark:border-white/[0.07]">
           <div className="w-16 h-16 rounded-full bg-brand-100 flex items-center justify-center shrink-0">
             <span className="text-2xl font-bold text-brand-700">
               {(user.full_name || user.email).charAt(0).toUpperCase()}
@@ -75,14 +75,14 @@ export default function UserDetailPage() {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-lg font-semibold text-gray-900">{user.full_name || '—'}</h2>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{user.full_name || '—'}</h2>
               {isSelf && (
                 <span className="text-xs bg-brand-50 text-brand-600 px-2 py-0.5 rounded-full font-medium">
                   شما
                 </span>
               )}
             </div>
-            <p className="text-sm text-gray-500">{user.email}</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{user.email}</p>
             <div className="flex items-center gap-2 mt-2">
               <RoleBadge role={user.role} />
               <span className={user.is_active ? 'badge-green' : 'badge-gray'}>
@@ -100,8 +100,8 @@ export default function UserDetailPage() {
             { label: 'تاریخ عضویت',    value: formatDate(user.created_at) },
           ].map(({ label, value }) => (
             <div key={label}>
-              <p className="text-xs text-gray-400 font-medium mb-1">{label}</p>
-              <p className="text-sm text-gray-800 font-medium">{value || '—'}</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 font-medium mb-1">{label}</p>
+              <p className="text-sm text-gray-800 dark:text-gray-200 font-medium">{value || '—'}</p>
             </div>
           ))}
         </div>
@@ -109,7 +109,7 @@ export default function UserDetailPage() {
 
       {/* Permissions info */}
       <div className="card p-5">
-        <h3 className="text-sm font-semibold text-gray-700 mb-4">دسترسی‌ها</h3>
+        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">دسترسی‌ها</h3>
         <div className="space-y-2">
           {[
             { label: 'مشاهده فایل‌های FITS',     allowed: true },
@@ -122,7 +122,7 @@ export default function UserDetailPage() {
           ].map(({ label, allowed }) => (
             <div key={label} className="flex items-center gap-3">
               <div className={`w-2 h-2 rounded-full shrink-0 ${allowed ? 'bg-green-500' : 'bg-gray-300'}`} />
-              <span className={`text-sm ${allowed ? 'text-gray-700' : 'text-gray-400'}`}>{label}</span>
+              <span className={`text-sm ${allowed ? 'text-gray-700 dark:text-gray-300' : 'text-gray-400 dark:text-gray-500'}`}>{label}</span>
             </div>
           ))}
         </div>
@@ -133,7 +133,7 @@ export default function UserDetailPage() {
       {showReset && <ResetModal user={user} onClose={() => setShowReset(false)} />}
       {showDelete && (
         <Modal title="حذف کاربر" onClose={() => setShowDelete(false)}>
-          <p className="text-sm text-gray-600 mb-5">
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-5">
             آیا مطمئنید؟ این عملیات غیرقابل بازگشت است.
           </p>
           <div className="flex gap-3">
@@ -189,11 +189,11 @@ function EditModal({ user, onClose }: { user: SafeUser; onClose: () => void }) {
             <option value="admin">Admin</option>
           </select>
         </div>
-        <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg border border-gray-200 hover:bg-gray-50">
+        <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg border border-gray-200 dark:border-white/10 hover:bg-gray-50">
           <input type="checkbox" checked={form.is_active}
             onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
             className="w-4 h-4 rounded accent-brand-600" />
-          <span className="text-sm text-gray-700">حساب فعال باشد</span>
+          <span className="text-sm text-gray-700 dark:text-gray-300">حساب فعال باشد</span>
         </label>
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex gap-3">

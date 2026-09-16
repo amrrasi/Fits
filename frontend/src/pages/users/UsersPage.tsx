@@ -52,8 +52,8 @@ export default function UsersPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">مدیریت کاربران</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
+          <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">مدیریت کاربران</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
             {isLoading ? '...' : `${data?.total ?? 0} کاربر`}
           </p>
         </div>
@@ -67,7 +67,7 @@ export default function UsersPage() {
       <div className="card p-4">
         <div className="flex flex-wrap gap-3 items-center">
           <div className="relative flex-1 min-w-52">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
             <input
               className="input pl-9"
               placeholder="جستجو در ایمیل یا نام..."
@@ -123,13 +123,13 @@ export default function UsersPage() {
                             </span>
                           </div>
                           <div>
-                            <div className="font-medium text-gray-900 text-sm">
-                              {u.full_name || <span className="text-gray-400 italic">بدون نام</span>}
+                            <div className="font-medium text-gray-900 dark:text-gray-100 text-sm">
+                              {u.full_name || <span className="text-gray-400 dark:text-gray-500 italic">بدون نام</span>}
                               {u.id === me?.id && (
                                 <span className="ml-2 text-xs bg-brand-50 text-brand-600 px-1.5 py-0.5 rounded">شما</span>
                               )}
                             </div>
-                            <div className="text-xs text-gray-400">{u.email}</div>
+                            <div className="text-xs text-gray-400 dark:text-gray-500">{u.email}</div>
                           </div>
                         </div>
                       </td>
@@ -139,27 +139,27 @@ export default function UsersPage() {
                           {u.is_active ? 'فعال' : 'غیرفعال'}
                         </span>
                       </td>
-                      <td className="table-td text-gray-500 text-xs">{formatDate(u.last_login_at)}</td>
-                      <td className="table-td text-gray-500 text-xs">{formatDate(u.created_at)}</td>
+                      <td className="table-td text-gray-500 dark:text-gray-400 text-xs">{formatDate(u.last_login_at)}</td>
+                      <td className="table-td text-gray-500 dark:text-gray-400 text-xs">{formatDate(u.created_at)}</td>
                       <td className="table-td">
                         <div className="flex items-center gap-1">
                           <Link
                             to={`/users/${u.id}`}
-                            className="btn-ghost p-1.5 text-gray-400 hover:text-brand-600"
+                            className="btn-ghost p-1.5 text-gray-400 dark:text-gray-500 hover:text-brand-600"
                             title="مشاهده جزئیات"
                           >
                             <Eye className="w-3.5 h-3.5" />
                           </Link>
                           <button
                             onClick={() => setEditUser(u)}
-                            className="btn-ghost p-1.5 text-gray-400 hover:text-blue-600"
+                            className="btn-ghost p-1.5 text-gray-400 dark:text-gray-500 hover:text-blue-600"
                             title="ویرایش"
                           >
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => setResetUser(u)}
-                            className="btn-ghost p-1.5 text-gray-400 hover:text-yellow-600"
+                            className="btn-ghost p-1.5 text-gray-400 dark:text-gray-500 hover:text-yellow-600"
                             title="ریست رمز"
                           >
                             <KeyRound className="w-3.5 h-3.5" />
@@ -167,7 +167,7 @@ export default function UsersPage() {
                           {u.id !== me?.id && (
                             <button
                               onClick={() => setDeleteUser(u)}
-                              className="btn-ghost p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50"
+                              className="btn-ghost p-1.5 text-gray-400 dark:text-gray-500 hover:text-red-600 hover:bg-red-50"
                               title="حذف"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -198,18 +198,18 @@ export default function UsersPage() {
       {deleteUser  && (
         <Modal title="حذف کاربر" onClose={() => setDeleteUser(null)}>
           <div className="mb-5">
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
               آیا مطمئنید می‌خواهید کاربر زیر را حذف کنید؟
             </p>
-            <div className="mt-3 flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+            <div className="mt-3 flex items-center gap-3 p-3 bg-gray-50 dark:bg-white/[0.03] rounded-lg">
               <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center shrink-0">
                 <span className="text-xs font-bold text-red-700">
                   {deleteUser.email.charAt(0).toUpperCase()}
                 </span>
               </div>
               <div>
-                <div className="text-sm font-medium text-gray-900">{deleteUser.full_name || deleteUser.email}</div>
-                <div className="text-xs text-gray-400">{deleteUser.email}</div>
+                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{deleteUser.full_name || deleteUser.email}</div>
+                <div className="text-xs text-gray-400 dark:text-gray-500">{deleteUser.email}</div>
               </div>
             </div>
             <p className="text-xs text-red-600 mt-3">این عملیات غیرقابل بازگشت است.</p>
@@ -361,7 +361,7 @@ function EditUserModal({ user, onClose }: { user: SafeUser; onClose: () => void 
             <option value="admin">Admin — دسترسی کامل</option>
           </select>
         </div>
-        <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:bg-gray-50 border border-gray-200">
+        <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:bg-gray-50 border border-gray-200 dark:border-white/10">
           <input
             type="checkbox"
             checked={form.is_active}
@@ -369,8 +369,8 @@ function EditUserModal({ user, onClose }: { user: SafeUser; onClose: () => void 
             className="w-4 h-4 rounded accent-brand-600"
           />
           <div>
-            <div className="text-sm font-medium text-gray-800">حساب فعال</div>
-            <div className="text-xs text-gray-400">کاربر غیرفعال نمی‌تواند وارد شود</div>
+            <div className="text-sm font-medium text-gray-800 dark:text-gray-200">حساب فعال</div>
+            <div className="text-xs text-gray-400 dark:text-gray-500">کاربر غیرفعال نمی‌تواند وارد شود</div>
           </div>
         </label>
         {error && <p className="text-sm text-red-600 bg-red-50 p-2 rounded-lg">{error}</p>}
@@ -420,7 +420,7 @@ function ResetPasswordModal({ user, onClose }: { user: SafeUser; onClose: () => 
           <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
             <span className="text-2xl">✅</span>
           </div>
-          <p className="text-sm font-medium text-gray-800">رمز با موفقیت تغییر کرد</p>
+          <p className="text-sm font-medium text-gray-800 dark:text-gray-200">رمز با موفقیت تغییر کرد</p>
           <button onClick={onClose} className="btn-secondary mt-4">بستن</button>
         </div>
       ) : (

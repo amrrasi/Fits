@@ -49,8 +49,8 @@ export default function ProfilePage() {
   return (
     <div className="max-w-xl space-y-6">
       <div>
-        <h1 className="text-xl font-bold text-gray-900">پروفایل من</h1>
-        <p className="text-sm text-gray-500 mt-0.5">اطلاعات حساب کاربری شما</p>
+        <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">پروفایل من</h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">اطلاعات حساب کاربری شما</p>
       </div>
 
       {/* User info card */}
@@ -62,8 +62,8 @@ export default function ProfilePage() {
             </span>
           </div>
           <div>
-            <h2 className="text-base font-semibold text-gray-900">{user.full_name || '—'}</h2>
-            <p className="text-sm text-gray-500">{user.email}</p>
+            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">{user.full_name || '—'}</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{user.email}</p>
           </div>
         </div>
 
@@ -75,8 +75,8 @@ export default function ProfilePage() {
             { label: 'تاریخ عضویت',   value: formatDate(user.created_at) },
           ].map(({ label, value }) => (
             <div key={label} className="flex flex-col gap-1">
-              <span className="text-xs text-gray-400 font-medium">{label}</span>
-              <span className="text-gray-800">{value}</span>
+              <span className="text-xs text-gray-400 dark:text-gray-500 font-medium">{label}</span>
+              <span className="text-gray-800 dark:text-gray-200">{value}</span>
             </div>
           ))}
         </div>
@@ -85,8 +85,8 @@ export default function ProfilePage() {
       {/* Change password */}
       <div className="card p-6">
         <div className="flex items-center gap-2 mb-5">
-          <KeyRound className="w-4 h-4 text-gray-500" />
-          <h2 className="text-sm font-semibold text-gray-900">تغییر رمز عبور</h2>
+          <KeyRound className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+          <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">تغییر رمز عبور</h2>
         </div>
 
         {pwdSuccess && (

@@ -46,31 +46,31 @@ export default function JobDetailPage() {
     <div className="space-y-5">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Link to="/jobs" className="text-gray-400 hover:text-gray-600">
+        <Link to="/jobs" className="text-gray-400 dark:text-gray-500 hover:text-gray-600">
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <div className="flex-1">
           <div className="flex items-center gap-3">
-            <h1 className="text-xl font-bold text-gray-900">اسکن #{job.id}</h1>
+            <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">اسکن #{job.id}</h1>
             <JobStatusBadge status={job.status} />
             {job.status === 'running' && (
               <RefreshCw className="w-4 h-4 text-brand-500 animate-spin" />
             )}
           </div>
-          <p className="text-sm text-gray-400 font-mono mt-0.5">{job.scan_dir}</p>
+          <p className="text-sm text-gray-400 dark:text-gray-500 font-mono mt-0.5">{job.scan_dir}</p>
         </div>
       </div>
 
       {/* Stats cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: 'کل فایل‌ها',     value: job.total_files, color: 'text-gray-900' },
+          { label: 'کل فایل‌ها',     value: job.total_files, color: 'text-gray-900 dark:text-gray-100' },
           { label: 'موفق',            value: job.done_files,  color: 'text-green-700' },
           { label: 'خطا',             value: job.error_files, color: 'text-red-600' },
-          { label: 'مدت زمان',        value: formatDuration(durationMs), color: 'text-gray-700' },
+          { label: 'مدت زمان',        value: formatDuration(durationMs), color: 'text-gray-700 dark:text-gray-300' },
         ].map(({ label, value, color }) => (
           <div key={label} className="card px-5 py-4">
-            <p className="text-xs text-gray-500">{label}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
             <p className={`text-2xl font-bold mt-1 ${color}`}>{value}</p>
           </div>
         ))}
@@ -79,10 +79,10 @@ export default function JobDetailPage() {
       {/* Progress bar */}
       <div className="card p-5">
         <div className="flex justify-between text-sm mb-2">
-          <span className="font-medium text-gray-700">پیشرفت پردازش</span>
-          <span className="font-bold text-gray-900">{pct}%</span>
+          <span className="font-medium text-gray-700 dark:text-gray-300">پیشرفت پردازش</span>
+          <span className="font-bold text-gray-900 dark:text-gray-100">{pct}%</span>
         </div>
-        <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
+        <div className="w-full bg-gray-100 dark:bg-white/[0.07] rounded-full h-3 overflow-hidden">
           <div
             className={`h-3 rounded-full transition-all duration-500 ${
               job.status === 'failed' ? 'bg-red-500' :
@@ -93,9 +93,9 @@ export default function JobDetailPage() {
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-4 mt-4 text-sm text-gray-500">
-          <div><span className="text-gray-400">شروع: </span>{formatDate(job.started_at)}</div>
-          <div><span className="text-gray-400">پایان: </span>{formatDate(job.finished_at)}</div>
+        <div className="grid grid-cols-2 gap-4 mt-4 text-sm text-gray-500 dark:text-gray-400">
+          <div><span className="text-gray-400 dark:text-gray-500">شروع: </span>{formatDate(job.started_at)}</div>
+          <div><span className="text-gray-400 dark:text-gray-500">پایان: </span>{formatDate(job.finished_at)}</div>
         </div>
 
         {job.error_message && (
@@ -108,8 +108,8 @@ export default function JobDetailPage() {
       {/* Errors table */}
       {job.status !== 'running' && (
         <div className="card overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-200">
-            <h2 className="text-sm font-semibold text-gray-900">
+          <div className="px-5 py-4 border-b border-gray-200 dark:border-white/10">
+            <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
               خطاهای پردازش
               {errorsQ.data?.total ? (
                 <span className="ml-2 text-xs font-normal text-red-600 bg-red-50 px-2 py-0.5 rounded-full">
@@ -146,17 +146,17 @@ export default function JobDetailPage() {
                         </span>
                       </td>
                       <td className="table-td max-w-xs">
-                        <span className="text-xs font-mono text-gray-500 truncate block" title={e.file_path}>
+                        <span className="text-xs font-mono text-gray-500 dark:text-gray-400 truncate block" title={e.file_path}>
                           {e.file_path.split('/').pop()}
                         </span>
-                        <span className="text-xs text-gray-300 truncate block">{e.file_path}</span>
+                        <span className="text-xs text-gray-300 dark:text-gray-600 truncate block">{e.file_path}</span>
                       </td>
                       <td className="table-td max-w-sm">
                         <span className="text-xs text-red-700 line-clamp-2" title={e.message}>
                           {e.message}
                         </span>
                       </td>
-                      <td className="table-td text-xs text-gray-400 whitespace-nowrap">
+                      <td className="table-td text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap">
                         {formatDate(e.created_at)}
                       </td>
                     </tr>

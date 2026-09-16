@@ -324,7 +324,7 @@ type triggerScanRequest struct {
 
 func (h *Handler) TriggerScan(w http.ResponseWriter, r *http.Request) {
 	var req triggerScanRequest
-	_ = api.DecodeJSON(w, r, &req) 
+	_ = api.DecodeJSON(w, r, &req)
 
 	scanDir := strings.TrimSpace(req.ScanDir)
 	if scanDir == "" {

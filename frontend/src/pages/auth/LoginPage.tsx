@@ -28,23 +28,24 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4 relative overflow-hidden">
+    <div className="min-h-screen bg-space-950 flex items-center justify-center p-4 relative overflow-hidden">
       {/* Ambient glow */}
       <div className="absolute -top-40 -start-40 w-96 h-96 bg-brand-600/20 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-40 -end-40 w-96 h-96 bg-brand-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-40 -end-40 w-96 h-96 bg-aurora-500/10 rounded-full blur-3xl pointer-events-none" />
 
-      <div className="w-full max-w-sm relative">
+      <div className="w-full max-w-sm relative enter-pop">
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <div className="w-12 h-12 bg-brand-600 rounded-xl flex items-center justify-center mb-3 shadow-lg shadow-brand-600/30">
-            <Star className="w-6 h-6 text-white" />
+          <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-3
+                           bg-gradient-to-br from-brand-400 to-brand-600 shadow-glow">
+            <Star className="w-6 h-6 text-white" fill="currentColor" strokeWidth={0} />
           </div>
           <h1 className="text-xl font-bold text-white">سامانه پردازش فایل‌های FITS</h1>
           <p className="text-gray-400 text-sm mt-1">مدیریت داده‌های نجومی</p>
         </div>
 
         {/* Card */}
-        <div className="bg-gray-900/80 backdrop-blur-sm rounded-2xl border border-gray-800 p-6 shadow-2xl">
+        <div className="bg-white/[0.05] backdrop-blur-xl rounded-2xl border border-white/10 p-6 shadow-glass-dark">
           <h2 className="text-base font-semibold text-white mb-5">ورود به حساب کاربری</h2>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -57,9 +58,9 @@ export default function LoginPage() {
                 placeholder="admin@fits.local"
                 required
                 autoFocus
-                className="w-full px-3 py-2.5 rounded-lg bg-gray-800 border border-gray-700 text-white
-                           placeholder:text-gray-500 text-sm focus:outline-none focus:ring-2
-                           focus:ring-brand-500 focus:border-transparent"
+                className="w-full px-3 py-2.5 rounded-xl bg-white/[0.04] border border-white/10 text-white
+                           placeholder:text-gray-500 text-sm transition-all duration-200
+                           focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400/60 focus:bg-white/[0.07]"
               />
             </div>
 
@@ -71,14 +72,14 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 required
-                className="w-full px-3 py-2.5 rounded-lg bg-gray-800 border border-gray-700 text-white
-                           placeholder:text-gray-500 text-sm focus:outline-none focus:ring-2
-                           focus:ring-brand-500 focus:border-transparent"
+                className="w-full px-3 py-2.5 rounded-xl bg-white/[0.04] border border-white/10 text-white
+                           placeholder:text-gray-500 text-sm transition-all duration-200
+                           focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400/60 focus:bg-white/[0.07]"
               />
             </div>
 
             {error && (
-              <div className="p-3 bg-red-900/40 border border-red-800 rounded-lg text-sm text-red-300">
+              <div className="p-3 bg-red-400/10 border border-red-400/20 rounded-xl text-sm text-red-300 enter-pop">
                 {error}
               </div>
             )}
@@ -86,8 +87,10 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg
-                         font-medium text-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed
+              className="w-full py-2.5 bg-gradient-to-b from-brand-500 to-brand-600 hover:from-brand-400 hover:to-brand-600
+                         text-white rounded-xl font-medium text-sm transition-all duration-200 shadow-glow
+                         hover:-translate-y-px active:scale-[.98]
+                         disabled:opacity-60 disabled:cursor-not-allowed disabled:translate-y-0
                          flex items-center justify-center gap-2"
             >
               {loading ? <><Spinner className="w-4 h-4 text-white" /> در حال ورود...</> : 'ورود'}
@@ -95,8 +98,8 @@ export default function LoginPage() {
           </form>
         </div>
 
-        <p className="text-center text-xs text-gray-600 mt-6">
-          FITS Processor v0.4 — Astronomical Data Management
+        <p className="text-center text-xs text-gray-500 mt-6">
+          FITS Processor v0.4 — مدیریت داده‌های نجومی
         </p>
       </div>
     </div>
