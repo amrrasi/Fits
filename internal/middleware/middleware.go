@@ -1,4 +1,3 @@
-// Package middleware provides HTTP middleware for security, observability, and robustness.
 package middleware
 
 import (
@@ -15,16 +14,10 @@ import (
 	"github.com/amrrasi/fits/internal/logger"
 )
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Request ID
-// ─────────────────────────────────────────────────────────────────────────────
-
 type contextKey string
 
 const requestIDKey contextKey = "request_id"
 
-// RequestID injects a unique request ID into the context and response header.
-// Every log line for that request should include this ID.
 func RequestID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := r.Header.Get("X-Request-ID")
@@ -37,7 +30,6 @@ func RequestID(next http.Handler) http.Handler {
 	})
 }
 
-// GetRequestID retrieves the request ID from the context.
 func GetRequestID(ctx context.Context) string {
 	if v, ok := ctx.Value(requestIDKey).(string); ok {
 		return v
@@ -45,11 +37,6 @@ func GetRequestID(ctx context.Context) string {
 	return ""
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Security Headers
-// ─────────────────────────────────────────────────────────────────────────────
-
-// SecurityHeaders adds defensive HTTP headers to every response.
 func SecurityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
@@ -58,24 +45,14 @@ func SecurityHeaders(next http.Handler) http.Handler {
 		h.Set("X-XSS-Protection", "1; mode=block")
 		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-		// Only add HSTS in production — don't break local dev
-		// h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 		next.ServeHTTP(w, r)
 	})
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CORS
-// ─────────────────────────────────────────────────────────────────────────────
-
-// CORSConfig holds CORS settings loaded from config.
 type CORSConfig struct {
-	// AllowedOrigins is the list of allowed origins.
-	// Use ["*"] only in development. In production list exact origins.
 	AllowedOrigins []string
 }
 
-// CORS returns a middleware that sets CORS headers based on the config.
 func CORS(cfg CORSConfig) func(http.Handler) http.Handler {
 	allowedSet := make(map[string]bool, len(cfg.AllowedOrigins))
 	allowAll := false
@@ -103,7 +80,6 @@ func CORS(cfg CORSConfig) func(http.Handler) http.Handler {
 				}
 			}
 
-			// Handle preflight
 			if r.Method == http.MethodOptions {
 				w.WriteHeader(http.StatusNoContent)
 				return
@@ -114,17 +90,12 @@ func CORS(cfg CORSConfig) func(http.Handler) http.Handler {
 	}
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Rate Limiter (token bucket per IP)
-// ─────────────────────────────────────────────────────────────────────────────
-
 type bucket struct {
 	tokens   float64
 	lastSeen time.Time
 	mu       sync.Mutex
 }
 
-// RateLimiter holds state for per-IP rate limiting.
 type RateLimiter struct {
 	rate     float64 // tokens per second
 	burst    float64 // max burst size
@@ -133,14 +104,12 @@ type RateLimiter struct {
 	stop     chan struct{}
 }
 
-// NewRateLimiter creates a limiter that allows `rate` requests/s with a burst of `burst`.
 func NewRateLimiter(rate, burst float64) *RateLimiter {
 	rl := &RateLimiter{
 		rate:  rate,
 		burst: burst,
 		stop:  make(chan struct{}),
 	}
-	// Clean up old buckets every minute
 	go func() {
 		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
@@ -165,7 +134,6 @@ func NewRateLimiter(rate, burst float64) *RateLimiter {
 	return rl
 }
 
-// Stop shuts down the background cleanup goroutine.
 func (rl *RateLimiter) Stop() {
 	rl.stopOnce.Do(func() { close(rl.stop) })
 }
@@ -189,7 +157,6 @@ func (rl *RateLimiter) allow(ip string) bool {
 	return false
 }
 
-// Limit returns middleware that rate-limits requests by client IP.
 func (rl *RateLimiter) Limit(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ip := clientIP(r)
@@ -217,11 +184,6 @@ func clientIP(r *http.Request) string {
 	return ip
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Request Size Limit
-// ─────────────────────────────────────────────────────────────────────────────
-
-// MaxBodySize limits incoming request bodies to n bytes.
 func MaxBodySize(n int64) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -230,10 +192,6 @@ func MaxBodySize(n int64) func(http.Handler) http.Handler {
 		})
 	}
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Request Logger
-// ─────────────────────────────────────────────────────────────────────────────
 
 type responseWriter struct {
 	http.ResponseWriter
@@ -245,7 +203,6 @@ func (rw *responseWriter) WriteHeader(status int) {
 	rw.ResponseWriter.WriteHeader(status)
 }
 
-// Logger logs every HTTP request with method, path, status, duration, and request ID.
 func Logger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -267,10 +224,6 @@ func Logger(next http.Handler) http.Handler {
 		)
 	})
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Helper
-// ─────────────────────────────────────────────────────────────────────────────
 
 func min(a, b float64) float64 {
 	if a < b {
