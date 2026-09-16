@@ -15,15 +15,15 @@ import (
 
 type Handler struct {
 	svc     *fitsservice.Service
-	scanDir string            // default scan directory from config
-	runFn   func(jobID int64) // injected by main via SetRunFn
+	scanDir string
+	runFn   func(jobID int64)
 }
 
 func New(svc *fitsservice.Service, scanDir string) *Handler {
 	return &Handler{
 		svc:     svc,
 		scanDir: scanDir,
-		runFn:   func(_ int64) {}, // safe no-op default
+		runFn:   func(_ int64) {},
 	}
 }
 
@@ -324,7 +324,7 @@ type triggerScanRequest struct {
 
 func (h *Handler) TriggerScan(w http.ResponseWriter, r *http.Request) {
 	var req triggerScanRequest
-	_ = api.DecodeJSON(w, r, &req) // body optional
+	_ = api.DecodeJSON(w, r, &req) 
 
 	scanDir := strings.TrimSpace(req.ScanDir)
 	if scanDir == "" {
