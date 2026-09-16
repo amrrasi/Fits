@@ -4,7 +4,6 @@ import (
 	"time"
 )
 
-// Role constants — match the user_role PostgreSQL ENUM.
 type Role string
 
 const (
@@ -13,17 +12,14 @@ const (
 	RoleViewer Role = "viewer"
 )
 
-// CanEdit returns true for roles that may mutate FITS data.
 func (r Role) CanEdit() bool {
 	return r == RoleAdmin || r == RoleEditor
 }
 
-// CanAdmin returns true only for the admin role.
 func (r Role) CanAdmin() bool {
 	return r == RoleAdmin
 }
 
-// User is the domain model for an authenticated user.
 type User struct {
 	ID           int64      `db:"id"`
 	Email        string     `db:"email"`
@@ -36,7 +32,6 @@ type User struct {
 	UpdatedAt    time.Time  `db:"updated_at"`
 }
 
-// SafeUser is a User without the password hash — safe to send over the wire.
 type SafeUser struct {
 	ID          int64      `json:"id"`
 	Email       string     `json:"email"`
@@ -47,7 +42,6 @@ type SafeUser struct {
 	CreatedAt   time.Time  `json:"created_at"`
 }
 
-// ToSafe strips the password hash.
 func (u *User) ToSafe() SafeUser {
 	return SafeUser{
 		ID:          u.ID,
@@ -60,7 +54,6 @@ func (u *User) ToSafe() SafeUser {
 	}
 }
 
-// Session tracks a single issued refresh token.
 type Session struct {
 	ID           string    `db:"id"`
 	UserID       int64     `db:"user_id"`
@@ -71,7 +64,6 @@ type Session struct {
 	CreatedAt    time.Time `db:"created_at"`
 }
 
-// TokenPair is what the login/refresh endpoints return to the client.
 type TokenPair struct {
 	AccessToken  string    `json:"access_token"`
 	RefreshToken string    `json:"refresh_token"`
