@@ -20,10 +20,11 @@ type JWTConfig struct {
 }
 
 type Claims struct {
-	UserID   int64       `json:"uid"`
-	Email    string      `json:"email"`
-	Role     models.Role `json:"role"`
-	FullName string      `json:"name"`
+	UserID      int64       `json:"uid"`
+	Email       string      `json:"email"`
+	Role        models.Role `json:"role"`
+	FullName    string      `json:"name"`
+	Permissions []string    `json:"perms"` // resolved from the RBAC tables at login/refresh time
 	jwt.RegisteredClaims
 }
 
@@ -41,15 +42,16 @@ func NewTokenService(cfg JWTConfig) *TokenService {
 	return &TokenService{cfg: cfg}
 }
 
-func (s *TokenService) IssueTokenPair(user *models.User) (accessToken, refreshToken string, accessExp time.Time, err error) {
+func (s *TokenService) IssueTokenPair(user *models.User, permissions []string) (accessToken, refreshToken string, accessExp time.Time, err error) {
 	now := time.Now()
 	accessExp = now.Add(s.cfg.AccessTTL)
 
 	claims := Claims{
-		UserID:   user.ID,
-		Email:    user.Email,
-		Role:     user.Role,
-		FullName: user.FullName,
+		UserID:      user.ID,
+		Email:       user.Email,
+		Role:        user.Role,
+		FullName:    user.FullName,
+		Permissions: permissions,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   fmt.Sprintf("%d", user.ID),
 			IssuedAt:  jwt.NewNumericDate(now),

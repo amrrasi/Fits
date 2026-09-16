@@ -35,14 +35,14 @@ func (r *JobRepository) Create(ctx context.Context, scanDir string) (int64, erro
 // GetByID returns a single job.
 func (r *JobRepository) GetByID(ctx context.Context, id int64) (*models.ProcessingJob, error) {
 	const q = `
-		SELECT id, scan_dir, status, total_files, done_files, error_files,
+		SELECT id, scan_dir, status, total_files, done_files, error_files, duplicate_files,
 		       started_at, finished_at, error_message
 		FROM processing_jobs WHERE id=$1`
 
 	j := &models.ProcessingJob{}
 	err := r.pool.QueryRow(ctx, q, id).Scan(
 		&j.ID, &j.ScanDir, &j.Status,
-		&j.TotalFiles, &j.DoneFiles, &j.ErrorFiles,
+		&j.TotalFiles, &j.DoneFiles, &j.ErrorFiles, &j.DuplicateFiles,
 		&j.StartedAt, &j.FinishedAt, &j.ErrorMsg,
 	)
 	if err == pgx.ErrNoRows {
@@ -55,10 +55,10 @@ func (r *JobRepository) GetByID(ctx context.Context, id int64) (*models.Processi
 }
 
 // UpdateProgress updates running counters.
-func (r *JobRepository) UpdateProgress(ctx context.Context, jobID int64, total, done, errCount int) error {
+func (r *JobRepository) UpdateProgress(ctx context.Context, jobID int64, total, done, errCount, duplicateCount int) error {
 	_, err := r.pool.Exec(ctx,
-		`UPDATE processing_jobs SET total_files=$2, done_files=$3, error_files=$4 WHERE id=$1`,
-		jobID, total, done, errCount,
+		`UPDATE processing_jobs SET total_files=$2, done_files=$3, error_files=$4, duplicate_files=$5 WHERE id=$1`,
+		jobID, total, done, errCount, duplicateCount,
 	)
 	if err != nil {
 		return fmt.Errorf("job_repo: update progress: %w", err)
@@ -95,7 +95,7 @@ func (r *JobRepository) ListJobs(ctx context.Context, page, pageSize int) ([]mod
 	}
 
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, scan_dir, status, total_files, done_files, error_files,
+		SELECT id, scan_dir, status, total_files, done_files, error_files, duplicate_files,
 		       started_at, finished_at, error_message
 		FROM processing_jobs
 		ORDER BY started_at DESC
@@ -110,7 +110,7 @@ func (r *JobRepository) ListJobs(ctx context.Context, page, pageSize int) ([]mod
 		var j models.ProcessingJob
 		if err := rows.Scan(
 			&j.ID, &j.ScanDir, &j.Status,
-			&j.TotalFiles, &j.DoneFiles, &j.ErrorFiles,
+			&j.TotalFiles, &j.DoneFiles, &j.ErrorFiles, &j.DuplicateFiles,
 			&j.StartedAt, &j.FinishedAt, &j.ErrorMsg,
 		); err != nil {
 			return nil, 0, fmt.Errorf("job_repo: scan: %w", err)

@@ -69,13 +69,13 @@ func (r *FileRepository) UpdateStatus(ctx context.Context, tx pgx.Tx, id int64, 
 func (r *FileRepository) GetByID(ctx context.Context, id int64) (*models.FITSFile, error) {
 	const q = `
 		SELECT id, file_path, file_name, file_size, checksum, hdu_count,
-		       status, error_message, processed_at, created_at, updated_at
+		       status, error_message, skipped_reason, processed_at, created_at, updated_at
 		FROM fits_files WHERE id = $1`
 
 	f := &models.FITSFile{}
 	err := r.pool.QueryRow(ctx, q, id).Scan(
 		&f.ID, &f.FilePath, &f.FileName, &f.FileSize, &f.Checksum, &f.HDUCount,
-		&f.Status, &f.ErrorMsg, &f.ProcessedAt, &f.CreatedAt, &f.UpdatedAt,
+		&f.Status, &f.ErrorMsg, &f.SkippedReason, &f.ProcessedAt, &f.CreatedAt, &f.UpdatedAt,
 	)
 	if err == pgx.ErrNoRows {
 		return nil, ErrNotFound
@@ -86,17 +86,54 @@ func (r *FileRepository) GetByID(ctx context.Context, id int64) (*models.FITSFil
 	return f, nil
 }
 
-// ChecksumDone returns true if a completed file with this checksum already exists.
-func (r *FileRepository) ChecksumDone(ctx context.Context, checksum string) (bool, error) {
+// PathDoneWithChecksum returns true if this exact path already has a completed
+// row with this checksum — i.e. an idempotent re-scan of an unchanged file.
+// This is NOT a "duplicate" (same content under a different name); it's the
+// same file seen again and needs no work at all.
+func (r *FileRepository) PathDoneWithChecksum(ctx context.Context, path, checksum string) (bool, error) {
 	var exists bool
 	err := r.pool.QueryRow(ctx,
-		`SELECT EXISTS(SELECT 1 FROM fits_files WHERE checksum=$1 AND status='done')`,
-		checksum,
+		`SELECT EXISTS(SELECT 1 FROM fits_files WHERE file_path=$1 AND checksum=$2 AND status='done')`,
+		path, checksum,
 	).Scan(&exists)
 	if err != nil {
-		return false, fmt.Errorf("file_repo: checksum check: %w", err)
+		return false, fmt.Errorf("file_repo: path checksum check: %w", err)
 	}
 	return exists, nil
+}
+
+// FindDoneByChecksum returns the first completed file whose content matches
+// checksum, excluding excludePath itself. A non-nil result means the file
+// currently being scanned is duplicate content of an already-stored file.
+func (r *FileRepository) FindDoneByChecksum(ctx context.Context, checksum, excludePath string) (*models.FITSFile, error) {
+	const q = `
+		SELECT id, file_path, file_name
+		FROM fits_files
+		WHERE checksum=$1 AND status='done' AND file_path <> $2
+		ORDER BY created_at ASC
+		LIMIT 1`
+	f := &models.FITSFile{}
+	err := r.pool.QueryRow(ctx, q, checksum, excludePath).Scan(&f.ID, &f.FilePath, &f.FileName)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("file_repo: find by checksum: %w", err)
+	}
+	return f, nil
+}
+
+// MarkSkipped marks a file row as skipped (e.g. duplicate content) with a
+// human-readable reason, without touching header/metadata tables.
+func (r *FileRepository) MarkSkipped(ctx context.Context, id int64, reason string) error {
+	const q = `
+		UPDATE fits_files
+		SET status='skipped', skipped_reason=$2, processed_at=NOW(), updated_at=NOW()
+		WHERE id=$1`
+	if _, err := r.pool.Exec(ctx, q, id, reason); err != nil {
+		return fmt.Errorf("file_repo: mark skipped: %w", err)
+	}
+	return nil
 }
 
 // Delete removes a fits_files row (cascades to headers, metadata, overrides).
@@ -196,7 +233,7 @@ func (r *FileRepository) ListFiles(ctx context.Context, f ListFilesFilter) (*Lis
 	listArgs := append(args, f.PageSize, offset)
 	listQ := fmt.Sprintf(`
 		SELECT f.id, f.file_path, f.file_name, f.file_size, f.checksum, f.hdu_count,
-		       f.status, f.error_message, f.processed_at, f.created_at, f.updated_at
+		       f.status, f.error_message, f.skipped_reason, f.processed_at, f.created_at, f.updated_at
 		FROM fits_files f
 		WHERE %s
 		ORDER BY %s %s
@@ -214,7 +251,7 @@ func (r *FileRepository) ListFiles(ctx context.Context, f ListFilesFilter) (*Lis
 		var file models.FITSFile
 		if err := rows.Scan(
 			&file.ID, &file.FilePath, &file.FileName, &file.FileSize,
-			&file.Checksum, &file.HDUCount, &file.Status, &file.ErrorMsg,
+			&file.Checksum, &file.HDUCount, &file.Status, &file.ErrorMsg, &file.SkippedReason,
 			&file.ProcessedAt, &file.CreatedAt, &file.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("file_repo: scan: %w", err)
