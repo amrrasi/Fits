@@ -2,7 +2,6 @@ import { useState, FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { Spinner } from '../../components/ui'
-import { Star } from 'lucide-react'
 
 export default function LoginPage() {
   const { login } = useAuth()
@@ -38,10 +37,10 @@ export default function LoginPage() {
         <div className="flex flex-col items-center mb-8">
           <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-3
                            bg-gradient-to-br from-brand-400 to-brand-600 shadow-glow">
-            <Star className="w-6 h-6 text-white" fill="currentColor" strokeWidth={0} />
+            <div><img src="/media/image/logo.png" alt="رصدخانه ملی ایران"/></div>
           </div>
           <h1 className="text-xl font-bold text-white">سامانه پردازش فایل‌های FITS</h1>
-          <p className="text-gray-400 text-sm mt-1">مدیریت داده‌های نجومی</p>
+          <p className="text-gray-400 text-sm mt-1">مدیریت داده‌های رصد خانه ملی ایران</p>
         </div>
 
         {/* Card */}
@@ -99,7 +98,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-center text-xs text-gray-500 mt-6">
-          FITS Processor v0.4 — مدیریت داده‌های نجومی
+           تمامی حقوق متعلق به رصدخانه ملی ایران (IPM) میباشد - {new Date().getFullYear()}
         </p>
       </div>
     </div>

@@ -30,7 +30,7 @@ export default {
         },
       },
       fontFamily: {
-        sans: ['Vazirmatn', 'Inter', 'system-ui', 'sans-serif'],
+        sans: ['Iransansfanum', 'Inter', 'system-ui', 'sans-serif'],
         mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
       },
       keyframes: {

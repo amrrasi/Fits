@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import {
-  LayoutDashboard, Files, Cpu, Users, LogOut, Star, ChevronLeft, UserCircle, Shield, Sun, Moon
+  LayoutDashboard, Files, Cpu, Users, LogOut, ChevronLeft, UserCircle, Shield, Sun, Moon
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useTheme } from '../../context/ThemeContext'
@@ -78,11 +78,11 @@ export default function AppLayout() {
         <div className="relative flex items-center gap-3 px-5 py-5 border-b border-white/[0.06]">
           <div className="w-8 h-8 rounded-lg grid place-items-center shrink-0
                            bg-gradient-to-br from-brand-400 to-brand-600 shadow-glow">
-            <Star className="w-4 h-4 text-white" fill="currentColor" strokeWidth={0} />
+            <img src="/media/image/logo.png" alt="رصدخانه ملی ایران (IPM)"/>
           </div>
           <div>
-            <div className="font-semibold text-sm leading-tight">FITS Processor</div>
-            <div className="text-[11px] text-gray-400">داده‌های نجومی</div>
+            <div className="font-semibold text-sm leading-tight">FITS Adder</div>
+            <div className="text-[11px] text-gray-400">داده‌های FITS</div>
           </div>
         </div>
 
