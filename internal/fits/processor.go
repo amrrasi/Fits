@@ -194,7 +194,6 @@ func (p *Processor) processFile(ctx context.Context, jobID int64, path string) (
 		return fileStatusOK, nil
 	}
 
-	// ── Detect duplicate content under a different path ──────────────────────
 	dup, err := p.files.FindDoneByChecksum(ctx, result.File.Checksum, path)
 	if err != nil {
 		log.Warnw("پردازشگر: duplicate check failed, processing anyway", "err", err)
@@ -261,7 +260,7 @@ func (p *Processor) processFile(ctx context.Context, jobID int64, path string) (
 	result.Metadata.FileID = fileID
 	if err := p.metadata.Upsert(ctx, tx, fileID, &result.Metadata); err != nil {
 		log.Warnw("پردازشگر: metadata upsert failed (non-fatal)", "err", err)
-		// Non-fatal: raw headers are the source of truth
+
 	}
 
 	processingMs := time.Since(start).Milliseconds()
@@ -269,7 +268,6 @@ func (p *Processor) processFile(ctx context.Context, jobID int64, path string) (
 		return "", fmt.Errorf("update file status: %w", err)
 	}
 
-	// 6. Commit
 	if err := tx.Commit(ctx); err != nil {
 		return "", fmt.Errorf("پردازشگر: commit tx: %w", err)
 	}
