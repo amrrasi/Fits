@@ -23,34 +23,55 @@ func New(svc *userservice.Service) *Handler {
 	return &Handler{svc: svc}
 }
 
-// RegisterRoutes wires all user endpoints.
-// authMW     — Bearer token validation middleware (applied to all routes)
-// adminMW    — requires admin role
-// editorMW  — requires admin or editor role
-func (h *Handler) RegisterRoutes(mux *http.ServeMux, authMW, adminMW func(http.Handler) http.Handler) {
+// RegisterRoutes wires all endpoints onto mux. authMW validates the bearer
+// token; each admin-area route is additionally gated by its own fine-grained
+// permission (resolved from the RBAC tables at login time).
+func (h *Handler) RegisterRoutes(mux *http.ServeMux, authMW func(http.Handler) http.Handler) {
+	perm := auth.RequirePermission
+
 	// ── /api/users/me — any authenticated user ────────────────────────────────
 	mux.Handle("GET /api/users/me",
 		authMW(http.HandlerFunc(h.Me)))
 	mux.Handle("PUT /api/users/me/password",
 		authMW(http.HandlerFunc(h.ChangeMyPassword)))
 
-	// ── /api/users — admin only ───────────────────────────────────────────────
+	// ── /api/users ─────────────────────────────────────────────────────────────
 	mux.Handle("GET /api/users",
-		authMW(adminMW(http.HandlerFunc(h.List))))
+		authMW(perm("users.view")(http.HandlerFunc(h.List))))
 	mux.Handle("POST /api/users",
-		authMW(adminMW(http.HandlerFunc(h.Create))))
+		authMW(perm("users.create")(http.HandlerFunc(h.Create))))
 	mux.Handle("GET /api/users/{id}",
-		authMW(adminMW(http.HandlerFunc(h.GetByID))))
+		authMW(perm("users.view")(http.HandlerFunc(h.GetByID))))
 	mux.Handle("PUT /api/users/{id}",
-		authMW(adminMW(http.HandlerFunc(h.Update))))
+		authMW(perm("users.edit")(http.HandlerFunc(h.Update))))
 	mux.Handle("DELETE /api/users/{id}",
-		authMW(adminMW(http.HandlerFunc(h.Delete))))
+		authMW(perm("users.delete")(http.HandlerFunc(h.Delete))))
 	mux.Handle("PUT /api/users/{id}/password",
-		authMW(adminMW(http.HandlerFunc(h.AdminResetPassword))))
+		authMW(perm("users.reset_password")(http.HandlerFunc(h.AdminResetPassword))))
 
-	// ── /api/audit-logs — admin only ─────────────────────────────────────────
+	// ── /api/users/{id}/roles — extra (non-primary) role grants ───────────────
+	mux.Handle("GET /api/users/{id}/roles",
+		authMW(perm("users.view")(http.HandlerFunc(h.GetUserRoles))))
+	mux.Handle("POST /api/users/{id}/roles",
+		authMW(perm("roles.manage")(http.HandlerFunc(h.AssignUserRole))))
+	mux.Handle("DELETE /api/users/{id}/roles/{roleId}",
+		authMW(perm("roles.manage")(http.HandlerFunc(h.RemoveUserRole))))
+
+	// ── /api/rbac — role & permission catalog management ──────────────────────
+	mux.Handle("GET /api/rbac/roles",
+		authMW(perm("roles.manage")(http.HandlerFunc(h.ListRoles))))
+	mux.Handle("POST /api/rbac/roles",
+		authMW(perm("roles.manage")(http.HandlerFunc(h.CreateRole))))
+	mux.Handle("DELETE /api/rbac/roles/{id}",
+		authMW(perm("roles.manage")(http.HandlerFunc(h.DeleteRole))))
+	mux.Handle("PUT /api/rbac/roles/{id}/permissions",
+		authMW(perm("roles.manage")(http.HandlerFunc(h.SetRolePermissions))))
+	mux.Handle("GET /api/rbac/permissions",
+		authMW(perm("roles.manage")(http.HandlerFunc(h.ListPermissions))))
+
+	// ── /api/audit-logs ─────────────────────────────────────────────────────────
 	mux.Handle("GET /api/audit-logs",
-		authMW(adminMW(http.HandlerFunc(h.ListAuditLogs))))
+		authMW(perm("audit.view")(http.HandlerFunc(h.ListAuditLogs))))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -376,4 +397,164 @@ func (h *Handler) ListAuditLogs(w http.ResponseWriter, r *http.Request) {
 		logs = []repository.AuditLog{}
 	}
 	api.WritePaged(w, logs, total, page, pageSize)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RBAC — roles, permissions, and per-user role assignments
+// ─────────────────────────────────────────────────────────────────────────────
+
+// GetUserRoles returns every role currently assigned to a user.
+func (h *Handler) GetUserRoles(w http.ResponseWriter, r *http.Request) {
+	id, err := api.PathID(r, "id")
+	if err != nil {
+		api.WriteBadRequest(w, err.Error())
+		return
+	}
+	names, err := h.svc.GetUserRoleNames(r.Context(), id)
+	if err != nil {
+		api.WriteInternalError(w, err)
+		return
+	}
+	if names == nil {
+		names = []string{}
+	}
+	api.WriteOK(w, map[string]interface{}{"roles": names})
+}
+
+type assignRoleRequest struct {
+	RoleID int64 `json:"role_id"`
+}
+
+// AssignUserRole grants an additional role to a user, on top of whatever
+// they already have (including their primary built-in role).
+func (h *Handler) AssignUserRole(w http.ResponseWriter, r *http.Request) {
+	userID, err := api.PathID(r, "id")
+	if err != nil {
+		api.WriteBadRequest(w, err.Error())
+		return
+	}
+	var req assignRoleRequest
+	if !api.DecodeJSON(w, r, &req) {
+		return
+	}
+	if req.RoleID < 1 {
+		api.WriteBadRequest(w, "role_id الزامی است")
+		return
+	}
+
+	claims := auth.ClaimsFromContext(r.Context())
+	var assignedBy int64
+	if claims != nil {
+		assignedBy = claims.UserID
+	}
+
+	if err := h.svc.AssignUserRole(r.Context(), userID, req.RoleID, assignedBy); err != nil {
+		api.WriteInternalError(w, err)
+		return
+	}
+	api.WriteOK(w, map[string]string{"message": "نقش اختصاص داده شد"})
+}
+
+// RemoveUserRole revokes a role from a user.
+func (h *Handler) RemoveUserRole(w http.ResponseWriter, r *http.Request) {
+	userID, err := api.PathID(r, "id")
+	if err != nil {
+		api.WriteBadRequest(w, err.Error())
+		return
+	}
+	roleID, err := api.PathID(r, "roleId")
+	if err != nil {
+		api.WriteBadRequest(w, err.Error())
+		return
+	}
+	if err := h.svc.RemoveUserRole(r.Context(), userID, roleID); err != nil {
+		api.WriteInternalError(w, err)
+		return
+	}
+	api.WriteNoContent(w)
+}
+
+// ListRoles returns every role together with its permission codes.
+func (h *Handler) ListRoles(w http.ResponseWriter, r *http.Request) {
+	roles, err := h.svc.ListRoles(r.Context())
+	if err != nil {
+		api.WriteInternalError(w, err)
+		return
+	}
+	if roles == nil {
+		roles = []models.RoleWithPermissions{}
+	}
+	api.WriteOK(w, roles)
+}
+
+// ListPermissions returns the full permission catalog.
+func (h *Handler) ListPermissions(w http.ResponseWriter, r *http.Request) {
+	perms, err := h.svc.ListPermissions(r.Context())
+	if err != nil {
+		api.WriteInternalError(w, err)
+		return
+	}
+	if perms == nil {
+		perms = []models.Permission{}
+	}
+	api.WriteOK(w, perms)
+}
+
+type createRoleRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+// CreateRole creates a new custom role (beyond admin/editor/viewer).
+func (h *Handler) CreateRole(w http.ResponseWriter, r *http.Request) {
+	var req createRoleRequest
+	if !api.DecodeJSON(w, r, &req) {
+		return
+	}
+	id, err := h.svc.CreateRole(r.Context(), req.Name, req.Description)
+	if err != nil {
+		api.WriteBadRequest(w, err.Error())
+		return
+	}
+	api.WriteCreated(w, map[string]interface{}{"id": id, "name": req.Name})
+}
+
+// DeleteRole removes a custom role. Built-in roles cannot be deleted.
+func (h *Handler) DeleteRole(w http.ResponseWriter, r *http.Request) {
+	id, err := api.PathID(r, "id")
+	if err != nil {
+		api.WriteBadRequest(w, err.Error())
+		return
+	}
+	if err := h.svc.DeleteRole(r.Context(), id); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			api.WriteNotFound(w, "نقش یافت نشد (یا نقشی پیش‌فرض است و قابل حذف نیست)")
+			return
+		}
+		api.WriteInternalError(w, err)
+		return
+	}
+	api.WriteNoContent(w)
+}
+
+type setRolePermissionsRequest struct {
+	Permissions []string `json:"permissions"`
+}
+
+// SetRolePermissions replaces a role's entire permission set.
+func (h *Handler) SetRolePermissions(w http.ResponseWriter, r *http.Request) {
+	roleID, err := api.PathID(r, "id")
+	if err != nil {
+		api.WriteBadRequest(w, err.Error())
+		return
+	}
+	var req setRolePermissionsRequest
+	if !api.DecodeJSON(w, r, &req) {
+		return
+	}
+	if err := h.svc.SetRolePermissions(r.Context(), roleID, req.Permissions); err != nil {
+		api.WriteInternalError(w, err)
+		return
+	}
+	api.WriteOK(w, map[string]string{"message": "دسترسی‌های نقش به‌روزرسانی شد"})
 }

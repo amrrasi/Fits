@@ -13,10 +13,11 @@ import (
 
 type Service struct {
 	repo *repository.UserRepository
+	rbac *repository.RBACRepository
 }
 
-func New(repo *repository.UserRepository) *Service {
-	return &Service{repo: repo}
+func New(repo *repository.UserRepository, rbac *repository.RBACRepository) *Service {
+	return &Service{repo: repo, rbac: rbac}
 }
 
 
@@ -79,6 +80,11 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("userservice: create: %w", err)
 	}
+
+	if err := s.rbac.SetPrimaryBuiltinRole(ctx, id, string(in.Role)); err != nil {
+		return 0, fmt.Errorf("userservice: sync role: %w", err)
+	}
+
 	return id, nil
 }
 
@@ -102,7 +108,15 @@ func (s *Service) Update(ctx context.Context, id int64, in UpdateInput) error {
 		}
 	}
 
-	return s.repo.UpdateUser(ctx, id, in.FullName, in.Role, in.IsActive)
+	if err := s.repo.UpdateUser(ctx, id, in.FullName, in.Role, in.IsActive); err != nil {
+		return err
+	}
+
+	if err := s.rbac.SetPrimaryBuiltinRole(ctx, id, string(in.Role)); err != nil {
+		return fmt.Errorf("userservice: sync role: %w", err)
+	}
+
+	return nil
 }
 
 type ChangePasswordInput struct {
@@ -190,4 +204,53 @@ var (
 // ListAuditLogs returns paginated audit log entries.
 func (s *Service) ListAuditLogs(ctx context.Context, f repository.ListAuditFilter) ([]repository.AuditLog, int, error) {
 	return s.repo.ListAuditLogs(ctx, f)
+}
+
+// ── RBAC management ────────────────────────────────────────────────────────────
+
+// GetUserRoleNames returns every role name currently assigned to a user
+// (their primary built-in role plus any extra custom roles).
+func (s *Service) GetUserRoleNames(ctx context.Context, userID int64) ([]string, error) {
+	return s.rbac.GetUserRoleNames(ctx, userID)
+}
+
+// AssignUserRole grants an additional role to a user.
+func (s *Service) AssignUserRole(ctx context.Context, userID, roleID, assignedBy int64) error {
+	return s.rbac.AssignUserRole(ctx, userID, roleID, &assignedBy)
+}
+
+// RemoveUserRole revokes a role from a user.
+func (s *Service) RemoveUserRole(ctx context.Context, userID, roleID int64) error {
+	return s.rbac.RemoveUserRole(ctx, userID, roleID)
+}
+
+// ListRoles returns every role with its permission codes.
+func (s *Service) ListRoles(ctx context.Context) ([]models.RoleWithPermissions, error) {
+	return s.rbac.ListRoles(ctx)
+}
+
+// ListPermissions returns the full permission catalog.
+func (s *Service) ListPermissions(ctx context.Context) ([]models.Permission, error) {
+	return s.rbac.ListPermissions(ctx)
+}
+
+// CreateRole creates a new custom role (built-in roles already exist and
+// cannot be duplicated).
+func (s *Service) CreateRole(ctx context.Context, name, description string) (int64, error) {
+	name = strings.TrimSpace(strings.ToLower(name))
+	if name == "" {
+		return 0, fmt.Errorf("نام نقش الزامی است")
+	}
+	return s.rbac.CreateRole(ctx, name, description)
+}
+
+// DeleteRole removes a custom role. Built-in roles (admin/editor/viewer)
+// cannot be deleted — the repository enforces this.
+func (s *Service) DeleteRole(ctx context.Context, roleID int64) error {
+	return s.rbac.DeleteRole(ctx, roleID)
+}
+
+// SetRolePermissions replaces a role's entire permission set.
+func (s *Service) SetRolePermissions(ctx context.Context, roleID int64, permissionCodes []string) error {
+	return s.rbac.SetRolePermissions(ctx, roleID, permissionCodes)
 }

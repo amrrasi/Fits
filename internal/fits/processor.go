@@ -15,8 +15,6 @@ import (
 	"github.com/amrrasi/fits/internal/repository"
 )
 
-// Processor ties together scanning, parsing, and persisting FITS files.
-// It uses the split repositories and wraps each file ingestion in a transaction.
 type Processor struct {
 	cfg      config.FITSConfig
 	pool     *pgxpool.Pool
@@ -26,7 +24,6 @@ type Processor struct {
 	jobs     *repository.JobRepository
 }
 
-// NewProcessor creates a Processor with the split repositories.
 func NewProcessor(
 	cfg config.FITSConfig,
 	pool *pgxpool.Pool,
@@ -109,10 +106,10 @@ func (p *Processor) RunWithJob(ctx context.Context, existingJobID int64) error {
 	close(pathCh)
 
 	var (
-		wg           sync.WaitGroup
-		doneAtomic   int64
-		errorAtomic  int64
-		dupAtomic    int64
+		wg          sync.WaitGroup
+		doneAtomic  int64
+		errorAtomic int64
+		dupAtomic   int64
 	)
 
 	workers := p.cfg.Workers
@@ -313,4 +310,3 @@ func (p *Processor) processFile(ctx context.Context, jobID int64, path string) (
 	)
 	return fileStatusOK, nil
 }
-

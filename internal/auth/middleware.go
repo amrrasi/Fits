@@ -56,6 +56,33 @@ func RequireRole(roles ...models.Role) func(http.Handler) http.Handler {
 	}
 }
 
+// RequirePermission gates a route by one or more fine-grained permission
+// codes (e.g. "files.delete"), resolved from the RBAC tables at login time
+// and embedded in the access token. The request is allowed through if the
+// caller holds AT LEAST ONE of the given codes.
+func RequirePermission(codes ...string) func(http.Handler) http.Handler {
+	allowed := make(map[string]bool, len(codes))
+	for _, c := range codes {
+		allowed[c] = true
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			claims := ClaimsFromContext(r.Context())
+			if claims == nil {
+				writeUnauthorized(w, "متاسفانه احراز هویت نشدید")
+				return
+			}
+			for _, p := range claims.Permissions {
+				if allowed[p] {
+					next.ServeHTTP(w, r)
+					return
+				}
+			}
+			writeForbidden(w, "دسترسی کافی برای این عمل را ندارید")
+		})
+	}
+}
+
 func ClaimsFromContext(ctx context.Context) *Claims {
 	c, _ := ctx.Value(claimsKey).(*Claims)
 	return c

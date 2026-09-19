@@ -13,11 +13,12 @@ import (
 
 type Service struct {
 	users  *repository.UserRepository
+	rbac   *repository.RBACRepository
 	tokens *TokenService
 }
 
-func NewService(users *repository.UserRepository, tokens *TokenService) *Service {
-	return &Service{users: users, tokens: tokens}
+func NewService(users *repository.UserRepository, rbac *repository.RBACRepository, tokens *TokenService) *Service {
+	return &Service{users: users, rbac: rbac, tokens: tokens}
 }
 
 func (s *Service) Login(ctx context.Context, email, password, userAgent, ip string) (*models.TokenPair, error) {
@@ -94,7 +95,13 @@ func (s *Service) Refresh(ctx context.Context, rawRefreshToken, userAgent, ip st
 }
 
 func (s *Service) issueTokens(ctx context.Context, user *models.User, userAgent, ip string) (*models.TokenPair, error) {
-	accessToken, refreshToken, accessExp, err := s.tokens.IssueTokenPair(user)
+	perms, err := s.rbac.GetUserPermissionCodes(ctx, user.ID)
+	if err != nil {
+		logger.S().Warnw("auth: failed to resolve permissions, issuing token with none", "user_id", user.ID, "err", err)
+		perms = []string{}
+	}
+
+	accessToken, refreshToken, accessExp, err := s.tokens.IssueTokenPair(user, perms)
 	if err != nil {
 		return nil, fmt.Errorf("خطایی رخ داده است: %w", err)
 	}
