@@ -1,90 +1,73 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios'
 import type { TokenPair } from '../types'
 
-// ── Token storage (memory only — never localStorage) ─────────────────────────
+// ── Access token: memory only (never localStorage). The refresh token is an
+//    httpOnly cookie managed by the server, so scripts can never read it. ──────
 let accessToken: string | null = null
-let refreshToken: string | null = null
 
 export const tokenStore = {
-  setTokens(pair: TokenPair) {
-    accessToken = pair.access_token
-    refreshToken = pair.refresh_token
-  },
-  clearTokens() {
-    accessToken = null
-    refreshToken = null
-  },
+  setAccessToken(t: string) { accessToken = t },
+  clear() { accessToken = null },
   getAccessToken: () => accessToken,
-  getRefreshToken: () => refreshToken,
 }
 
-// ── Axios instance ────────────────────────────────────────────────────────────
+const CSRF_HEADER = { 'X-Requested-With': 'fits' }
+
 export const api = axios.create({
   baseURL: '/api',
-  headers: { 'Content-Type': 'application/json' },
+  headers: { 'Content-Type': 'application/json', ...CSRF_HEADER },
   timeout: 30_000,
+  withCredentials: true,
 })
 
-// Attach bearer token to every request
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-  if (accessToken) {
-    config.headers.Authorization = `Bearer ${accessToken}`
-  }
+  if (accessToken) config.headers.Authorization = `Bearer ${accessToken}`
   return config
 })
 
-// Auto-refresh on 401
-let isRefreshing = false
-let pendingQueue: Array<{ resolve: (v: string) => void; reject: (e: unknown) => void }> = []
+/** Turns any error into a short, user-friendly Persian message. */
+export function errorMessage(err: unknown, fallback = 'مشکلی پیش آمد؛ دوباره تلاش کنید'): string {
+  const e = err as AxiosError<{ error?: string }>
+  if (e?.response?.data?.error) return e.response.data.error
+  if (e?.code === 'ECONNABORTED') return 'پاسخی از سرور نیامد؛ اتصال خود را بررسی کنید'
+  if (e?.request && !e.response) return 'ارتباط با سرور برقرار نشد'
+  return fallback
+}
+
+// Shared silent-refresh (also used at app start to restore the session after a page reload)
+let refreshing: Promise<TokenPair> | null = null
+export function silentRefresh(): Promise<TokenPair> {
+  if (!refreshing) {
+    refreshing = axios
+      .post<TokenPair>('/api/auth/refresh', undefined, { headers: CSRF_HEADER, withCredentials: true })
+      .then((r) => {
+        accessToken = r.data.access_token
+        return r.data
+      })
+      .finally(() => { refreshing = null })
+  }
+  return refreshing
+}
+
+let onSessionExpired: (() => void) | null = null
+export function setSessionExpiredHandler(fn: () => void) { onSessionExpired = fn }
 
 api.interceptors.response.use(
   (res) => res,
   async (error: AxiosError) => {
     const original = error.config as InternalAxiosRequestConfig & { _retry?: boolean }
-
-    if (error.response?.status !== 401 || original._retry) {
+    if (error.response?.status !== 401 || !original || original._retry || original.url?.includes('/auth/')) {
       return Promise.reject(error)
     }
-
-    // Don't retry auth endpoints themselves
-    if (original.url?.includes('/auth/')) {
-      return Promise.reject(error)
-    }
-
-    if (isRefreshing) {
-      return new Promise<string>((resolve, reject) => {
-        pendingQueue.push({ resolve, reject })
-      }).then((token) => {
-        original.headers.Authorization = `Bearer ${token}`
-        return api(original)
-      })
-    }
-
     original._retry = true
-    isRefreshing = true
-
     try {
-      const rt = tokenStore.getRefreshToken()
-      if (!rt) throw new Error('no refresh token')
-
-      const { data } = await axios.post<TokenPair>('/api/auth/refresh', {
-        refresh_token: rt,
-      })
-      tokenStore.setTokens(data)
-
-      pendingQueue.forEach((p) => p.resolve(data.access_token))
-      pendingQueue = []
-
-      original.headers.Authorization = `Bearer ${data.access_token}`
+      const pair = await silentRefresh()
+      original.headers.Authorization = `Bearer ${pair.access_token}`
       return api(original)
     } catch (err) {
-      pendingQueue.forEach((p) => p.reject(err))
-      pendingQueue = []
-      tokenStore.clearTokens()
-      window.location.href = '/login'
+      tokenStore.clear()
+      onSessionExpired?.()
       return Promise.reject(err)
-    } finally {
-      isRefreshing = false
     }
   },
 )

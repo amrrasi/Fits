@@ -96,7 +96,6 @@ DB_PASSWORD=postgres          # your PostgreSQL password
 DB_NAME=fits_db
 FITS_SCAN_DIR=./testdata      # directory with .fits files
 JWT_ACCESS_SECRET=any-string-at-least-32-chars-long!!
-JWT_REFRESH_SECRET=different-string-at-least-32-chars!
 ```
 
 ### Step 4 — Download Go dependencies
@@ -149,8 +148,8 @@ Go to **http://localhost:3000** and log in with:
 
 | Field | Value |
 |---|---|
-| Email | `admin@fits.local` |
-| Password | `Admin@1234` |
+| Email | `ADMIN_EMAIL` (default `admin@fits.local`) |
+| Password | `ADMIN_PASSWORD`, or the random password printed **once** in the console on first start |
 
 **Change this password immediately after first login.**
 
@@ -188,7 +187,7 @@ make clean           # remove bin/, logs/, frontend/dist/
 
 ```bash
 cp .env.example .env
-# Set DB_PASSWORD, JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, CORS_ALLOWED_ORIGINS
+# Set DB_PASSWORD, JWT_ACCESS_SECRET, CORS_ALLOWED_ORIGINS
 
 docker-compose up -d
 ```
@@ -274,7 +273,9 @@ The Docker image:
 | `DB_NAME` | `fits_db` | Database name |
 | `DB_SSLMODE` | `disable` | `disable` / `require` |
 | `JWT_ACCESS_SECRET` | _(insecure default)_ | Min 32 chars in production |
-| `JWT_REFRESH_SECRET` | _(insecure default)_ | Min 32 chars in production |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | `admin@fits.local` / _(random, printed once)_ | First admin, created only when no active admin exists |
+| `TRUSTED_PROXIES` | _(none)_ | CIDRs allowed to set `X-Forwarded-For` |
+| `COOKIE_SECURE` | `true` in production | `Secure` flag of the refresh cookie |
 | `JWT_ACCESS_TTL` | `15m` | Access token lifetime |
 | `JWT_REFRESH_TTL` | `168h` | Refresh token lifetime |
 | `SERVER_ADDR` | `:8080` | HTTP listen address |

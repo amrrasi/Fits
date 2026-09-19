@@ -1,35 +1,54 @@
-import React, { createContext, useContext, useEffect, useState } from 'react'
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
 
-type Theme = 'light' | 'dark'
+export type ThemePref = 'light' | 'dark' | 'system'
 
 interface ThemeContextValue {
-  theme: Theme
+  /** what the user picked */
+  pref: ThemePref
+  /** what is actually applied right now */
+  theme: 'light' | 'dark'
+  setPref: (p: ThemePref) => void
   toggleTheme: () => void
 }
 
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined)
-
 const STORAGE_KEY = 'fits-theme'
+const mq = () => window.matchMedia('(prefers-color-scheme: dark)')
 
-function getInitialTheme(): Theme {
-  const stored = localStorage.getItem(STORAGE_KEY)
-  if (stored === 'light' || stored === 'dark') return stored
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+function readPref(): ThemePref {
+  try {
+    const v = localStorage.getItem(STORAGE_KEY)
+    if (v === 'light' || v === 'dark' || v === 'system') return v
+  } catch { /* storage blocked */ }
+  return 'system'
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(getInitialTheme)
+  const [pref, setPrefState] = useState<ThemePref>(readPref)
+  const [systemDark, setSystemDark] = useState(() => mq().matches)
 
   useEffect(() => {
-    const root = document.documentElement
-    root.classList.toggle('dark', theme === 'dark')
-    localStorage.setItem(STORAGE_KEY, theme)
+    const m = mq()
+    const on = (e: MediaQueryListEvent) => setSystemDark(e.matches)
+    m.addEventListener('change', on)
+    return () => m.removeEventListener('change', on)
+  }, [])
+
+  const theme: 'light' | 'dark' = pref === 'system' ? (systemDark ? 'dark' : 'light') : pref
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark')
   }, [theme])
 
-  const toggleTheme = () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))
+  const setPref = useCallback((p: ThemePref) => {
+    setPrefState(p)
+    try { localStorage.setItem(STORAGE_KEY, p) } catch { /* ignore */ }
+  }, [])
+
+  const toggleTheme = useCallback(() => setPref(theme === 'dark' ? 'light' : 'dark'), [theme, setPref])
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+    <ThemeContext.Provider value={{ pref, theme, setPref, toggleTheme }}>
       {children}
     </ThemeContext.Provider>
   )

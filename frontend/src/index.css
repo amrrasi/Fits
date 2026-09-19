@@ -4,68 +4,77 @@
 
 @layer base {
   :root {
-    /* ── Light theme — warm neutral, not cold gray ─────────────────────── */
-    --c-bg:            250 250 249;
+    /* ── Light — soft lavender-tinted neutrals ────────────────────────── */
+    --c-bg:            246 247 252;
     --c-surface:       255 255 255;
-    --c-surface-2:     245 245 244;
+    --c-surface-2:     238 241 250;
     --c-sidebar:       255 255 255;
-    --c-border:        231 229 228;
-    --c-border-strong: 214 211 209;
-    --c-text:          28 25 23;
-    --c-text-secondary:87 83 78;
-    --c-text-muted:    168 162 158;
+    --c-border:        226 230 242;
+    --c-border-strong: 200 207 227;
+    --c-text:          24 28 48;
+    --c-text-secondary:78 87 118;
+    --c-text-muted:    128 136 165;
 
-    /* Accent — restrained copper. Same ramp in both themes; components pick
-       the shade that reads well (600 for filled buttons, 400 for on-dark text). */
-    --c-accent-50:  251 243 236;
-    --c-accent-100: 245 228 211;
-    --c-accent-200: 233 199 163;
-    --c-accent-300: 220 168 114;
-    --c-accent-400: 204 138 76;
-    --c-accent-500: 184 112 60;
-    --c-accent-600: 156 90 44;
-    --c-accent-700: 125 71 34;
-    --c-accent-800: 95 54 25;
-    --c-accent-900: 66 37 16;
+    /* Accent — friendly indigo */
+    --c-accent-50:  238 242 255;
+    --c-accent-100: 224 231 255;
+    --c-accent-200: 199 210 254;
+    --c-accent-300: 165 180 252;
+    --c-accent-400: 129 140 248;
+    --c-accent-500: 99 102 241;
+    --c-accent-600: 79 70 229;
+    --c-accent-700: 67 56 202;
+    --c-accent-800: 55 48 163;
+    --c-accent-900: 49 46 129;
 
-    --c-success: 21 128 61;   --c-success-bg: 240 253 244;
-    --c-warning: 161 98 7;    --c-warning-bg: 254 252 232;
-    --c-danger:  185 28 28;   --c-danger-bg:  254 242 242;
-    --c-info:    29 78 216;   --c-info-bg:    239 246 255;
+    --c-success: 21 128 61;   --c-success-bg: 232 250 240;
+    --c-warning: 161 98 7;    --c-warning-bg: 255 247 219;
+    --c-danger:  185 28 28;   --c-danger-bg:  254 236 236;
+    --c-info:    29 78 216;   --c-info-bg:    232 241 255;
   }
 
   .dark {
-    /* ── Dark theme — warm charcoal, not pure black ────────────────────── */
-    --c-bg:            22 21 19;
-    --c-surface:       31 30 28;
-    --c-surface-2:     40 39 36;
-    --c-sidebar:       18 17 16;
-    --c-border:        54 52 48;
-    --c-border-strong: 72 69 64;
-    --c-text:          237 235 232;
-    --c-text-secondary:170 164 158;
-    --c-text-muted:    115 110 105;
+    /* ── Dark — deep night-sky blue (not pure black) ───────────────────── */
+    --c-bg:            11 14 26;
+    --c-surface:       20 25 45;
+    --c-surface-2:     30 37 63;
+    --c-sidebar:       15 19 36;
+    --c-border:        42 50 82;
+    --c-border-strong: 62 72 110;
+    --c-text:          234 237 249;
+    --c-text-secondary:165 174 205;
+    --c-text-muted:    115 124 157;
 
-    --c-success: 74 222 128;   --c-success-bg: 20 40 28;
-    --c-warning: 234 179 8;    --c-warning-bg: 42 36 12;
-    --c-danger:  248 113 113;  --c-danger-bg:  46 22 22;
-    --c-info:    96 165 250;   --c-info-bg:    20 30 48;
+    /* The accent ramp is re-mapped in dark mode so that *any* shade used on its own
+       (tinted backgrounds, links, hover fills) stays readable — nothing turns white. */
+    --c-accent-50:  30 27 75;
+    --c-accent-100: 41 37 98;
+    --c-accent-200: 55 48 130;
+    --c-accent-300: 165 180 252;
+    --c-accent-400: 129 140 248;
+    --c-accent-500: 118 122 245;
+    --c-accent-600: 99 102 241;
+    --c-accent-700: 79 70 229;
+    --c-accent-800: 67 56 202;
+    --c-accent-900: 224 231 255;
+
+    --c-success: 74 222 128;   --c-success-bg: 18 46 36;
+    --c-warning: 250 204 21;   --c-warning-bg: 50 42 14;
+    --c-danger:  252 129 129;  --c-danger-bg:  56 24 32;
+    --c-info:    125 180 255;  --c-info-bg:    22 36 66;
   }
 
-  * {
-    border-color: rgb(var(--c-border));
-  }
-  html {
-    font-feature-settings: 'ss01' 1;
-  }
+  * { border-color: rgb(var(--c-border)); }
+  html { font-feature-settings: 'ss01' 1; color-scheme: light; }
+  html.dark { color-scheme: dark; }
   body {
     background-color: rgb(var(--c-bg));
     color: rgb(var(--c-text));
     @apply antialiased transition-colors duration-150;
   }
-  ::selection {
-    background-color: rgb(var(--c-accent-200) / 0.5);
-  }
+  ::selection { background-color: rgb(var(--c-accent-400) / 0.35); }
+  :focus-visible { outline: 2px solid rgb(var(--c-accent-500)); outline-offset: 2px; }
+
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
       animation-duration: .001ms !important;
@@ -77,84 +86,91 @@
 @layer components {
   /* ── Buttons ─────────────────────────────────────────────────────────── */
   .btn {
-    @apply inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md
-           font-medium text-sm leading-none transition-colors duration-100
+    @apply inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg
+           font-medium text-sm leading-none transition-all duration-150
            disabled:opacity-50 disabled:cursor-not-allowed select-none;
   }
-  .btn-primary {
-    @apply btn bg-accent-600 text-white hover:bg-accent-700 active:bg-accent-800;
-  }
-  .btn-secondary {
-    @apply btn bg-surface text-text border border-border-strong
-           hover:bg-surface2 active:bg-border;
-  }
-  .btn-danger {
-    @apply btn bg-danger text-white hover:opacity-90 active:opacity-80;
-  }
-  .btn-ghost {
-    @apply btn text-text-secondary hover:bg-surface2 hover:text-text;
-  }
+  .btn-primary   { @apply btn bg-accent-600 text-white shadow-sm hover:bg-accent-700 active:scale-[.98]; }
+  .btn-secondary { @apply btn bg-surface text-text border border-border-strong hover:bg-surface2 active:scale-[.98]; }
+  .btn-danger    { @apply btn bg-danger text-white hover:opacity-90 active:scale-[.98]; }
+  .btn-ghost     { @apply btn text-text-secondary hover:bg-surface2 hover:text-text; }
+  .btn-brand     { @apply btn-primary; }
 
   /* ── Form controls ───────────────────────────────────────────────────── */
   .input {
-    @apply w-full px-2.5 py-1.5 rounded-md border border-border-strong text-sm bg-surface text-text
+    @apply w-full px-3 py-2 rounded-lg border border-border-strong text-sm bg-surface text-text
            focus:outline-none focus:ring-2 focus:ring-accent-500/40 focus:border-accent-500
            placeholder:text-text-muted disabled:bg-surface2 disabled:text-text-muted
            transition-colors duration-100;
   }
-  .label {
-    @apply block text-xs font-medium text-text-secondary mb-1;
-  }
+  .label { @apply block text-xs font-medium text-text-secondary mb-1.5; }
 
   /* ── Surfaces ─────────────────────────────────────────────────────────── */
-  .panel {
-    @apply bg-surface border border-border rounded-lg;
+  .panel { @apply bg-surface border border-border rounded-xl; }
+  .card  { @apply bg-surface border border-border rounded-2xl shadow-subtle; }
+  .card-hover {
+    @apply bg-surface border border-border rounded-2xl shadow-subtle block
+           transition-all duration-200 hover:-translate-y-0.5 hover:shadow-popover hover:border-accent-400/60;
   }
-  .card {
-    @apply bg-surface border border-border rounded-lg shadow-subtle;
-  }
-  .sidebar-surface {
-    @apply bg-sidebar;
-  }
+  .sidebar-surface { @apply bg-sidebar; }
 
-  /* ── Status pills — subtle tinted background + dot ───────────────────── */
-  .pill {
-    @apply inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium;
-  }
+  /* ── Status pills ─────────────────────────────────────────────────────── */
+  .pill { @apply inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium; }
   .pill-dot { @apply w-1.5 h-1.5 rounded-full shrink-0; }
   .pill-success { @apply pill bg-success-bg text-success; }
   .pill-warning { @apply pill bg-warning-bg text-warning; }
   .pill-danger  { @apply pill bg-danger-bg text-danger; }
   .pill-info    { @apply pill bg-info-bg text-info; }
   .pill-neutral { @apply pill bg-surface2 text-text-secondary; }
-
-  /* Legacy badge-* kept only until every page migrates to pill-* */
   .badge { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium; }
   .badge-green  { @apply badge bg-success-bg text-success; }
   .badge-yellow { @apply badge bg-warning-bg text-warning; }
   .badge-red    { @apply badge bg-danger-bg text-danger; }
   .badge-blue   { @apply badge bg-info-bg text-info; }
   .badge-gray   { @apply badge bg-surface2 text-text-secondary; }
-  /* TEMP alias so pages not yet migrated from the old brand-* palette still render */
-  .btn-brand { @apply btn-primary; }
 
-  /* ── Tables — dense, readable, sticky header ─────────────────────────── */
+  /* ── Tables ───────────────────────────────────────────────────────────── */
   .table-th {
-    @apply px-3 py-2 text-start text-xs font-semibold text-text-secondary
+    @apply px-3 py-2.5 text-start text-xs font-semibold text-text-secondary
            bg-surface2 border-b border-border sticky top-0 z-10;
   }
-  .table-td {
-    @apply px-3 py-2 text-sm text-text border-b border-border;
+  .table-td { @apply px-3 py-2.5 text-sm text-text border-b border-border; }
+  /* Hover is a tint of the SAME theme tokens — never a hard-coded light colour. */
+  .table-row-hover { @apply hover:bg-accent-500/[0.07] transition-colors duration-100; }
+
+  /* ── Menus / popovers ─────────────────────────────────────────────────── */
+  .menu { @apply bg-surface border border-border rounded-xl shadow-popover p-1.5 min-w-[13rem] animate-fade-up; }
+  .menu-item {
+    @apply flex w-full items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm text-text
+           hover:bg-surface2 transition-colors text-start;
   }
-  .table-row-hover {
-    @apply hover:bg-surface2/60 transition-colors duration-75;
+  .menu-item-danger { @apply menu-item text-danger hover:bg-danger-bg; }
+  .kbd {
+    @apply inline-flex items-center px-1.5 py-0.5 rounded-md border border-border-strong bg-surface2
+           text-[10px] font-mono text-text-secondary;
   }
 
-  /* Embed inherently-LTR content (paths, hashes, ISO dates) inside RTL text
-     without the bidi algorithm reordering punctuation/slashes. */
-  .ltr {
-    direction: ltr;
-    unicode-bidi: isolate;
-    text-align: start;
+  /* ── Motion ───────────────────────────────────────────────────────────── */
+  .enter     { animation: fade-up .3s cubic-bezier(.16,1,.3,1) both; }
+  .enter-pop { animation: pop .22s cubic-bezier(.16,1,.3,1) both; }
+
+  /* Embed inherently-LTR content (paths, hashes, ISO dates) in RTL text */
+  .ltr { direction: ltr; unicode-bidi: isolate; text-align: start; }
+
+  /* Login backdrop — twinkling stars, pure CSS */
+  .stars {
+    background-image:
+      radial-gradient(1.5px 1.5px at 20% 30%, rgb(255 255 255 / .9), transparent),
+      radial-gradient(1px 1px at 70% 20%, rgb(255 255 255 / .8), transparent),
+      radial-gradient(1.5px 1.5px at 40% 70%, rgb(199 210 254 / .9), transparent),
+      radial-gradient(1px 1px at 85% 65%, rgb(255 255 255 / .7), transparent),
+      radial-gradient(1px 1px at 10% 85%, rgb(255 255 255 / .8), transparent),
+      radial-gradient(1.5px 1.5px at 60% 45%, rgb(224 231 255 / .8), transparent);
+    background-size: 340px 340px;
+    animation: twinkle 5s ease-in-out infinite alternate;
   }
 }
+
+@keyframes fade-up { 0% { opacity: 0; transform: translateY(6px); } 100% { opacity: 1; transform: none; } }
+@keyframes pop     { 0% { opacity: 0; transform: scale(.96); }     100% { opacity: 1; transform: none; } }
+@keyframes twinkle { 0% { opacity: .55; } 100% { opacity: 1; } }

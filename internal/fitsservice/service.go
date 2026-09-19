@@ -2,13 +2,18 @@ package fitsservice
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/amrrasi/fits/internal/api"
+	"github.com/amrrasi/fits/internal/fits"
 	"github.com/amrrasi/fits/internal/logger"
 	"github.com/amrrasi/fits/internal/models"
 	"github.com/amrrasi/fits/internal/repository"
@@ -20,7 +25,21 @@ type Service struct {
 	headers  *repository.HeaderRepository
 	metadata *repository.MetadataRepository
 	jobs     *repository.JobRepository
+
+	scanRoot string
+	scanner  Scanner
 }
+
+// Scanner starts a background scan (implemented by fits.Processor).
+type Scanner interface {
+	Start(scanDir string) (int64, error)
+}
+
+// SetScanner wires the processor used by TriggerScan.
+func (s *Service) SetScanner(sc Scanner) { s.scanner = sc }
+
+// Ping checks database connectivity (used by /ready).
+func (s *Service) Ping(ctx context.Context) error { return s.pool.Ping(ctx) }
 
 func New(
 	pool *pgxpool.Pool,
@@ -28,8 +47,10 @@ func New(
 	headers *repository.HeaderRepository,
 	metadata *repository.MetadataRepository,
 	jobs *repository.JobRepository,
+	scanRoot string,
 ) *Service {
 	return &Service{
+		scanRoot: scanRoot,
 		pool:     pool,
 		files:    files,
 		headers:  headers,
@@ -75,51 +96,35 @@ type EditMetadataInput struct {
 
 func (s *Service) EditMetadata(ctx context.Context, in EditMetadataInput) error {
 	in.FieldName = strings.ToLower(strings.TrimSpace(in.FieldName))
-
-	allowed := repository.AllowedEditFields()
-	if _, ok := allowed[in.FieldName]; !ok {
-		return fmt.Errorf("field %q is not editable; allowed fields: %s",
-			in.FieldName, joinKeys(allowed))
+	if _, ok := repository.AllowedEditFields()[in.FieldName]; !ok {
+		return api.Invalid("این فیلد قابل ویرایش نیست")
 	}
-
+	in.NewValue = strings.TrimSpace(in.NewValue)
+	in.Reason = strings.TrimSpace(in.Reason)
+	if len([]rune(in.Reason)) > 500 {
+		return api.Invalid("توضیح تغییر نباید بیشتر از ۵۰۰ کاراکتر باشد")
+	}
 	if err := validateMetadataValue(in.FieldName, in.NewValue); err != nil {
 		return err
 	}
-
 	current, err := s.metadata.GetByFileID(ctx, in.FileID)
-	if err != nil && err != repository.ErrNotFound {
+	if err != nil && !errors.Is(err, repository.ErrNotFound) {
 		return fmt.Errorf("fitsservice: get current metadata: %w", err)
 	}
-	originalValue := currentFieldValue(current, in.FieldName)
-
-	reason := in.Reason
 	var reasonPtr *string
-	if reason != "" {
-		reasonPtr = &reason
+	if in.Reason != "" {
+		r := in.Reason
+		reasonPtr = &r
 	}
 	editorID := in.EditorID
-	if err := s.metadata.InsertOverride(ctx, &repository.MetadataOverride{
-		FileID:        in.FileID,
-		FieldName:     in.FieldName,
-		OriginalValue: originalValue,
-		NewValue:      in.NewValue,
-		Reason:        reasonPtr,
-		EditedBy:      &editorID,
+	// override history + value update happen in ONE transaction
+	if err := s.metadata.EditFieldTx(ctx, &repository.MetadataOverride{
+		FileID: in.FileID, FieldName: in.FieldName, OriginalValue: currentFieldValue(current, in.FieldName),
+		NewValue: in.NewValue, Reason: reasonPtr, EditedBy: &editorID,
 	}); err != nil {
-		return fmt.Errorf("fitsservice: record override: %w", err)
+		return err
 	}
-
-	if err := s.metadata.ApplyFieldUpdate(ctx, in.FileID, in.FieldName, in.NewValue); err != nil {
-		return fmt.Errorf("fitsservice: apply field update: %w", err)
-	}
-
-	logger.S().Infow("fitsservice: metadata edited",
-		"file_id", in.FileID,
-		"field", in.FieldName,
-		"old", originalValue,
-		"new", in.NewValue,
-		"editor", in.EditorID,
-	)
+	logger.S().Infow("fitsservice: metadata edited", "file_id", in.FileID, "field", in.FieldName, "editor", in.EditorID)
 	return nil
 }
 
@@ -142,56 +147,66 @@ func (s *Service) GetJobErrors(ctx context.Context, jobID int64, page, pageSize 
 	return s.jobs.ListErrors(ctx, jobID, page, pageSize)
 }
 
-func (s *Service) TriggerScan(ctx context.Context, scanDir string, runFn func(jobID int64)) (int64, error) {
-	running, err := s.jobs.HasRunningJob(ctx)
+// TriggerScan validates the requested directory (must be inside the configured scan root)
+// and starts a background scan. Returns the job id and the resolved directory.
+func (s *Service) TriggerScan(_ context.Context, requested string) (int64, string, error) {
+	dir, err := fits.ResolveScanDir(s.scanRoot, requested)
 	if err != nil {
-		return 0, fmt.Errorf("fitsservice: check running job: %w", err)
+		return 0, "", api.Invalid(err.Error())
 	}
-	if running {
-		return 0, ErrScanAlreadyRunning
+	if s.scanner == nil {
+		return 0, "", errors.New("fitsservice: scanner not configured")
 	}
-
-	jobID, err := s.jobs.Create(ctx, scanDir)
+	jobID, err := s.scanner.Start(dir)
 	if err != nil {
-		return 0, fmt.Errorf("fitsservice: create job: %w", err)
+		return 0, "", err
 	}
+	logger.S().Infow("fitsservice: scan triggered", "job_id", jobID, "scan_dir", dir)
+	return jobID, dir, nil
+}
 
-	go func() {
-		bgCtx, cancel := context.WithTimeout(context.Background(), 6*time.Hour)
-		defer cancel()
-		runFn(jobID)
-		_ = bgCtx
-	}()
-
-	logger.S().Infow("fitsservice: scan triggered", "job_id", jobID, "scan_dir", scanDir)
-	return jobID, nil
+func numRange(field, value string, min, max float64) error {
+	f, err := strconv.ParseFloat(value, 64)
+	if err != nil || math.IsNaN(f) || math.IsInf(f, 0) || f < min || f > max {
+		return api.Invalid(fmt.Sprintf("مقدار «%s» باید عددی بین %v و %v باشد", field, min, max))
+	}
+	return nil
 }
 
 func validateMetadataValue(field, value string) error {
-	value = strings.TrimSpace(value)
 	if value == "" {
-		return fmt.Errorf("value for %q cannot be empty", field)
+		return api.Invalid("مقدار جدید نمی‌تواند خالی باشد")
+	}
+	if len([]rune(value)) > 200 {
+		return api.Invalid("مقدار نباید بیشتر از ۲۰۰ کاراکتر باشد")
+	}
+	for _, c := range value {
+		if unicode.IsControl(c) {
+			return api.Invalid("مقدار شامل کاراکتر نامعتبر است")
+		}
 	}
 	switch field {
 	case "ra":
-		f, err := strconv.ParseFloat(value, 64)
-		if err != nil || f < 0 || f > 360 {
-			return fmt.Errorf("ra must be a decimal number between 0 and 360")
-		}
-	case "dec":
-		f, err := strconv.ParseFloat(value, 64)
-		if err != nil || f < -90 || f > 90 {
-			return fmt.Errorf("dec must be a decimal number between -90 and 90")
-		}
+		return numRange(field, value, 0, 360)
+	case "dec", "site_lat":
+		return numRange(field, value, -90, 90)
+	case "site_lon":
+		return numRange(field, value, -180, 180)
+	case "site_elev":
+		return numRange(field, value, -500, 10000)
 	case "exptime", "gain", "rdnoise":
-		f, err := strconv.ParseFloat(value, 64)
-		if err != nil || f < 0 {
-			return fmt.Errorf("%s must be a non-negative number", field)
-		}
+		return numRange(field, value, 0, 1e7)
 	case "airmass":
-		f, err := strconv.ParseFloat(value, 64)
-		if err != nil || f < 1 {
-			return fmt.Errorf("airmass must be >= 1")
+		return numRange(field, value, 1, 100)
+	case "set_temp", "ccd_temp", "amb_temp":
+		return numRange(field, value, -273.15, 200)
+	case "date_obs":
+		if _, err := time.Parse("2006-01-02", value); err != nil {
+			return api.Invalid("تاریخ باید به شکل YYYY-MM-DD باشد")
+		}
+	case "time_obs":
+		if _, err := time.Parse("15:04:05", value); err != nil {
+			return api.Invalid("زمان باید به شکل HH:MM:SS باشد")
 		}
 	}
 	return nil
@@ -265,7 +280,7 @@ func joinKeys(m map[string]struct{}) string {
 	return strings.Join(keys, ", ")
 }
 
-var ErrScanAlreadyRunning = fmt.Errorf("a scan is already running")
+var ErrScanAlreadyRunning = fits.ErrScanAlreadyRunning
 
 type Stats struct {
 	TotalFiles   int `json:"total_files"`

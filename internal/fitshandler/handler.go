@@ -3,12 +3,15 @@
 package fitshandler
 
 import (
+	"context"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/amrrasi/fits/internal/api"
+	"github.com/amrrasi/fits/internal/audit"
 	"github.com/amrrasi/fits/internal/auth"
 	"github.com/amrrasi/fits/internal/fitsservice"
 	"github.com/amrrasi/fits/internal/models"
@@ -17,24 +20,21 @@ import (
 
 // Handler exposes FITS data endpoints.
 type Handler struct {
-	svc     *fitsservice.Service
-	scanDir string              // default scan directory from config
-	runFn   func(jobID int64)   // injected by main via SetRunFn
+	svc   *fitsservice.Service
+	audit *audit.Recorder
 }
 
 // New creates a Handler.
-func New(svc *fitsservice.Service, scanDir string) *Handler {
-	return &Handler{
-		svc:     svc,
-		scanDir: scanDir,
-		runFn:   func(_ int64) {}, // safe no-op default
-	}
+func New(svc *fitsservice.Service, rec *audit.Recorder) *Handler {
+	return &Handler{svc: svc, audit: rec}
 }
 
-// SetRunFn injects the actual processor run function.
-// Call this from main after both handler and processor are initialised.
-func (h *Handler) SetRunFn(fn func(jobID int64)) {
-	h.runFn = fn
+func actor(r *http.Request) *int64 {
+	if c := auth.ClaimsFromContext(r.Context()); c != nil {
+		id := c.UserID
+		return &id
+	}
+	return nil
 }
 
 // RegisterRoutes wires all endpoints onto mux. authMW validates the bearer
@@ -47,21 +47,21 @@ func (h *Handler) RegisterRoutes(
 	perm := auth.RequirePermission
 
 	// Files
-	mux.Handle("GET /api/files",         authMW(perm("files.view")(http.HandlerFunc(h.ListFiles))))
-	mux.Handle("GET /api/files/{id}",    authMW(perm("files.view")(http.HandlerFunc(h.GetFile))))
+	mux.Handle("GET /api/files", authMW(perm("files.view")(http.HandlerFunc(h.ListFiles))))
+	mux.Handle("GET /api/files/{id}", authMW(perm("files.view")(http.HandlerFunc(h.GetFile))))
 	mux.Handle("DELETE /api/files/{id}", authMW(perm("files.delete")(http.HandlerFunc(h.DeleteFile))))
 
 	// Headers
 	mux.Handle("GET /api/files/{id}/headers", authMW(perm("files.view")(http.HandlerFunc(h.ListHeaders))))
 
 	// Metadata
-	mux.Handle("GET /api/files/{id}/metadata",         authMW(perm("files.view")(http.HandlerFunc(h.GetMetadata))))
-	mux.Handle("PUT /api/files/{id}/metadata",         authMW(perm("files.metadata.edit")(http.HandlerFunc(h.EditMetadata))))
+	mux.Handle("GET /api/files/{id}/metadata", authMW(perm("files.view")(http.HandlerFunc(h.GetMetadata))))
+	mux.Handle("PUT /api/files/{id}/metadata", authMW(perm("files.metadata.edit")(http.HandlerFunc(h.EditMetadata))))
 	mux.Handle("GET /api/files/{id}/metadata/history", authMW(perm("files.view")(http.HandlerFunc(h.GetMetadataHistory))))
 
 	// Jobs
-	mux.Handle("GET /api/jobs",             authMW(perm("jobs.view")(http.HandlerFunc(h.ListJobs))))
-	mux.Handle("GET /api/jobs/{id}",        authMW(perm("jobs.view")(http.HandlerFunc(h.GetJob))))
+	mux.Handle("GET /api/jobs", authMW(perm("jobs.view")(http.HandlerFunc(h.ListJobs))))
+	mux.Handle("GET /api/jobs/{id}", authMW(perm("jobs.view")(http.HandlerFunc(h.GetJob))))
 	mux.Handle("GET /api/jobs/{id}/errors", authMW(perm("jobs.view")(http.HandlerFunc(h.GetJobErrors))))
 	mux.Handle("GET /api/jobs/{id}/status", authMW(perm("jobs.view")(http.HandlerFunc(h.GetJobStatus))))
 
@@ -138,6 +138,7 @@ func (h *Handler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 		api.WriteBadRequest(w, err.Error())
 		return
 	}
+	old, gerr := h.svc.GetFile(r.Context(), id)
 	if err := h.svc.DeleteFile(r.Context(), id); err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
 			api.WriteNotFound(w, "فایل یافت نشد")
@@ -146,6 +147,11 @@ func (h *Handler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 		api.WriteInternalError(w, err)
 		return
 	}
+	var oldVal interface{}
+	if gerr == nil {
+		oldVal = map[string]interface{}{"file_name": old.FileName, "file_path": old.FilePath}
+	}
+	h.audit.Log(r, actor(r), "file.delete", "fits_file", strconv.FormatInt(id, 10), oldVal, nil)
 	api.WriteNoContent(w)
 }
 
@@ -239,9 +245,11 @@ func (h *Handler) EditMetadata(w http.ResponseWriter, r *http.Request) {
 			api.WriteNotFound(w, "فایل یا متادیتا یافت نشد")
 			return
 		}
-		api.WriteBadRequest(w, err.Error())
+		api.WriteError(w, err)
 		return
 	}
+	h.audit.Log(r, actor(r), "metadata.edit", "fits_file", strconv.FormatInt(id, 10), nil,
+		map[string]interface{}{"field": strings.ToLower(strings.TrimSpace(req.FieldName)), "new_value": strings.TrimSpace(req.NewValue), "reason": req.Reason})
 
 	meta, err := h.svc.GetMetadata(r.Context(), id)
 	if err != nil {
@@ -364,30 +372,22 @@ type triggerScanRequest struct {
 
 func (h *Handler) TriggerScan(w http.ResponseWriter, r *http.Request) {
 	var req triggerScanRequest
-	_ = api.DecodeJSON(w, r, &req) // body optional
-
-	scanDir := strings.TrimSpace(req.ScanDir)
-	if scanDir == "" {
-		scanDir = h.scanDir
-	}
-	if scanDir == "" {
-		api.WriteBadRequest(w, "scan_dir الزامی است (یا FITS_SCAN_DIR را تنظیم کنید)")
+	if !api.DecodeJSONOptional(w, r, &req) { // body is optional
 		return
 	}
-
-	jobID, err := h.svc.TriggerScan(r.Context(), scanDir, h.runFn)
+	jobID, dir, err := h.svc.TriggerScan(r.Context(), req.ScanDir)
 	if err != nil {
 		if errors.Is(err, fitsservice.ErrScanAlreadyRunning) {
 			api.WriteConflict(w, err.Error())
 			return
 		}
-		api.WriteInternalError(w, err)
+		api.WriteError(w, err)
 		return
 	}
-
+	h.audit.Log(r, actor(r), "scan.trigger", "scan", strconv.FormatInt(jobID, 10), nil, map[string]interface{}{"scan_dir": dir})
 	api.WriteCreated(w, map[string]interface{}{
 		"job_id":   jobID,
-		"scan_dir": scanDir,
+		"scan_dir": dir,
 		"message":  "اسکن شروع شد",
 	})
 }
@@ -395,7 +395,14 @@ func (h *Handler) TriggerScan(w http.ResponseWriter, r *http.Request) {
 // ── GET /ready ────────────────────────────────────────────────────────────────
 
 func (h *Handler) Ready(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
 	w.Header().Set("Content-Type", "application/json")
+	if err := h.svc.Ping(ctx); err != nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{"status":"unavailable"}`))
+		return
+	}
 	_, _ = w.Write([]byte(`{"status":"ready","service":"fits-processor"}`))
 }
 

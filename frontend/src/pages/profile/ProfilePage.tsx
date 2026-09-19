@@ -4,7 +4,7 @@ import { usersApi } from '../../api/endpoints'
 import { useAuth } from '../../context/AuthContext'
 import { RoleBadge, Spinner } from '../../components/ui'
 import { formatDate } from '../../utils/format'
-import { User, KeyRound, CheckCircle2 } from 'lucide-react'
+import { KeyRound, CheckCircle2 } from 'lucide-react'
 
 export default function ProfilePage() {
   const { user } = useAuth()
@@ -33,8 +33,8 @@ export default function ProfilePage() {
     e.preventDefault()
     setPwdSuccess(false)
     setPwdError('')
-    if (newPwd.length < 8) {
-      setPwdError('رمز جدید باید حداقل ۸ کاراکتر باشد')
+    if (newPwd.length < 10) {
+      setPwdError('رمز جدید باید حداقل ۱۰ کاراکتر و ترکیبی از حروف و عدد باشد')
       return
     }
     if (newPwd !== confirmPwd) {
@@ -49,21 +49,21 @@ export default function ProfilePage() {
   return (
     <div className="max-w-xl space-y-6">
       <div>
-        <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">پروفایل من</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">اطلاعات حساب کاربری شما</p>
+        <h1 className="text-xl font-bold text-text">پروفایل من</h1>
+        <p className="text-sm text-text-secondary mt-0.5">اطلاعات حساب کاربری شما</p>
       </div>
 
       {/* User info card */}
       <div className="card p-6">
         <div className="flex items-center gap-4 mb-5">
-          <div className="w-14 h-14 rounded-full bg-brand-100 flex items-center justify-center shrink-0">
-            <span className="text-xl font-bold text-brand-700">
+          <div className="w-14 h-14 rounded-full bg-accent-100 flex items-center justify-center shrink-0">
+            <span className="text-xl font-bold text-accent-700">
               {(user.full_name || user.email).charAt(0).toUpperCase()}
             </span>
           </div>
           <div>
-            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">{user.full_name || '—'}</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400">{user.email}</p>
+            <h2 className="text-base font-semibold text-text">{user.full_name || '—'}</h2>
+            <p className="text-sm text-text-secondary">{user.email}</p>
           </div>
         </div>
 
@@ -75,8 +75,8 @@ export default function ProfilePage() {
             { label: 'تاریخ عضویت',   value: formatDate(user.created_at) },
           ].map(({ label, value }) => (
             <div key={label} className="flex flex-col gap-1">
-              <span className="text-xs text-gray-400 dark:text-gray-500 font-medium">{label}</span>
-              <span className="text-gray-800 dark:text-gray-200">{value}</span>
+              <span className="text-xs text-text-muted font-medium">{label}</span>
+              <span className="text-text">{value}</span>
             </div>
           ))}
         </div>
@@ -85,12 +85,12 @@ export default function ProfilePage() {
       {/* Change password */}
       <div className="card p-6">
         <div className="flex items-center gap-2 mb-5">
-          <KeyRound className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-          <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">تغییر رمز عبور</h2>
+          <KeyRound className="w-4 h-4 text-text-secondary" />
+          <h2 className="text-sm font-semibold text-text">تغییر رمز عبور</h2>
         </div>
 
         {pwdSuccess && (
-          <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg mb-4 text-sm text-green-700">
+          <div className="flex items-center gap-2 p-3 bg-success-bg border border-success/40 rounded-lg mb-4 text-sm text-success">
             <CheckCircle2 className="w-4 h-4 shrink-0" />
             رمز عبور با موفقیت تغییر کرد
           </div>
@@ -115,7 +115,7 @@ export default function ProfilePage() {
               value={newPwd}
               onChange={(e) => setNewPwd(e.target.value)}
               required
-              minLength={8}
+              minLength={10}
             />
           </div>
           <div>
@@ -130,7 +130,7 @@ export default function ProfilePage() {
           </div>
 
           {pwdError && (
-            <p className="text-sm text-red-600">{pwdError}</p>
+            <p className="text-sm text-danger">{pwdError}</p>
           )}
 
           <button

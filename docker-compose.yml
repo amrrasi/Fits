@@ -12,8 +12,6 @@ services:
       POSTGRES_DB:       ${DB_NAME:-fits_db}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-fits_db}"]
       interval: 10s
@@ -28,6 +26,10 @@ services:
       dockerfile: Dockerfile
     container_name: fits_app
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     depends_on:
       db:
         condition: service_healthy
@@ -42,7 +44,10 @@ services:
 
       # Auth — MUST be changed in production
       JWT_ACCESS_SECRET:  ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET is required}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
+      ADMIN_EMAIL:        ${ADMIN_EMAIL:-admin@fits.local}
+      ADMIN_PASSWORD:     ${ADMIN_PASSWORD:-}
+      TRUSTED_PROXIES:    ${TRUSTED_PROXIES:-}
+      COOKIE_SECURE:      ${COOKIE_SECURE:-true}
       JWT_ACCESS_TTL:     ${JWT_ACCESS_TTL:-15m}
       JWT_REFRESH_TTL:    ${JWT_REFRESH_TTL:-168h}
 

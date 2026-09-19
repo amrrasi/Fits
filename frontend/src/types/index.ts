@@ -10,11 +10,11 @@ export interface SafeUser {
   is_active: boolean
   last_login_at?: string
   created_at: string
+  permissions?: string[]
 }
 
 export interface TokenPair {
   access_token: string
-  refresh_token: string
   expires_at: string
   user: SafeUser
 }

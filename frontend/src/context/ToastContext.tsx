@@ -46,21 +46,21 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
 
       {/* Toast container */}
-      <div className="fixed bottom-5 end-5 z-50 flex flex-col gap-2 pointer-events-none">
+      <div className="fixed bottom-5 end-5 z-[60] flex flex-col gap-2 pointer-events-none" role="status" aria-live="polite">
         {toasts.map((toast) => (
           <div
             key={toast.id}
             className={clsx(
               'flex items-start gap-3 px-4 py-3 rounded-xl shadow-lg border text-sm font-medium',
-              'pointer-events-auto max-w-sm animate-in slide-in-from-bottom-2',
-              toast.type === 'success' && 'bg-green-50 border-green-200 text-green-800',
-              toast.type === 'error'   && 'bg-red-50   border-red-200   text-red-800',
-              toast.type === 'warning' && 'bg-yellow-50 border-yellow-200 text-yellow-800',
+              'pointer-events-auto max-w-sm enter',
+              toast.type === 'success' && 'bg-success-bg border-success/40 text-success',
+              toast.type === 'error'   && 'bg-danger-bg   border-danger/40   text-danger',
+              toast.type === 'warning' && 'bg-warning-bg border-warning/40 text-warning',
             )}
           >
-            {toast.type === 'success' && <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-green-600" />}
-            {toast.type === 'error'   && <XCircle      className="w-4 h-4 shrink-0 mt-0.5 text-red-600" />}
-            {toast.type === 'warning' && <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-yellow-600" />}
+            {toast.type === 'success' && <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-success" />}
+            {toast.type === 'error'   && <XCircle      className="w-4 h-4 shrink-0 mt-0.5 text-danger" />}
+            {toast.type === 'warning' && <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-warning" />}
             <span className="flex-1">{toast.message}</span>
             <button onClick={() => remove(toast.id)} className="shrink-0 opacity-60 hover:opacity-100 transition-opacity">
               <X className="w-3.5 h-3.5" />

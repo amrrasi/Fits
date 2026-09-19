@@ -1,37 +1,81 @@
-// Package userservice contains business logic for user and role management.
 package userservice
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/mail"
+	"regexp"
 	"strings"
+	"unicode"
 
+	"github.com/jackc/pgx/v5/pgconn"
+
+	"github.com/amrrasi/fits/internal/api"
 	"github.com/amrrasi/fits/internal/auth"
 	"github.com/amrrasi/fits/internal/models"
 	"github.com/amrrasi/fits/internal/repository"
 )
 
+var (
+	ErrEmailTaken = errors.New("این ایمیل قبلاً ثبت شده است")
+	ErrLastAdmin  = repository.ErrLastAdmin
+	roleNameRe    = regexp.MustCompile(`^[a-z0-9_-]{2,32}$`)
+)
+
+// SessionInvalidator drops cached auth state so changes apply immediately.
+type SessionInvalidator interface {
+	Invalidate(userID int64)
+	InvalidateAll()
+}
+
 type Service struct {
 	repo *repository.UserRepository
 	rbac *repository.RBACRepository
+	inv  SessionInvalidator
 }
 
-func New(repo *repository.UserRepository, rbac *repository.RBACRepository) *Service {
-	return &Service{repo: repo, rbac: rbac}
+func New(repo *repository.UserRepository, rbac *repository.RBACRepository, inv SessionInvalidator) *Service {
+	return &Service{repo: repo, rbac: rbac, inv: inv}
 }
-
 
 func (s *Service) List(ctx context.Context, f repository.ListUsersFilter) (*repository.ListUsersResult, error) {
 	return s.repo.ListUsers(ctx, f)
 }
 
-
 func (s *Service) GetByID(ctx context.Context, id int64) (*models.User, error) {
-	u, err := s.repo.GetByID(ctx, id)
-	if err != nil {
-		return nil, err
+	return s.repo.GetByID(ctx, id)
+}
+
+func validRole(r models.Role) bool {
+	return r == models.RoleAdmin || r == models.RoleEditor || r == models.RoleViewer
+}
+
+func validateEmail(email string) error {
+	if len(email) > 254 {
+		return api.Invalid("ایمیل بیش از حد طولانی است")
 	}
-	return u, nil
+	a, err := mail.ParseAddress(email)
+	if err != nil || a.Address != email || !strings.Contains(email[strings.LastIndex(email, "@"):], ".") {
+		return api.Invalid("ایمیل واردشده معتبر نیست")
+	}
+	return nil
+}
+
+func cleanName(name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", api.Invalid("نام و نام خانوادگی الزامی است")
+	}
+	if len([]rune(name)) > 100 {
+		return "", api.Invalid("نام نباید بیشتر از ۱۰۰ کاراکتر باشد")
+	}
+	for _, c := range name {
+		if unicode.IsControl(c) {
+			return "", api.Invalid("نام شامل کاراکتر نامعتبر است")
+		}
+	}
+	return name, nil
 }
 
 type CreateInput struct {
@@ -42,49 +86,38 @@ type CreateInput struct {
 }
 
 func (s *Service) Create(ctx context.Context, in CreateInput) (int64, error) {
-	// Normalise
-	in.Email = strings.TrimSpace(strings.ToLower(in.Email))
-	in.FullName = strings.TrimSpace(in.FullName)
-
-	if in.Email == "" {
-		return 0, fmt.Errorf("email is required")
+	in.Email = strings.ToLower(strings.TrimSpace(in.Email))
+	if err := validateEmail(in.Email); err != nil {
+		return 0, err
 	}
-	if !strings.Contains(in.Email, "@") {
-		return 0, fmt.Errorf("آدرس ایمیل نامعتبر")
-	}
-	if len(in.Password) < 8 {
-		return 0, fmt.Errorf("رمز عبور شما باید بیش از 8 کاراکتر باشد")
+	name, err := cleanName(in.FullName)
+	if err != nil {
+		return 0, err
 	}
 	if in.Role == "" {
 		in.Role = models.RoleViewer
 	}
 	if !validRole(in.Role) {
-		return 0, fmt.Errorf("نقش نامعتبر! نقش های مجاز: admin, editor, reader")
+		return 0, api.Invalid("نقش نامعتبر است (admin, editor, viewer)")
 	}
-
-
-	exists, err := s.repo.EmailExists(ctx, in.Email)
-	if err != nil {
-		return 0, fmt.Errorf("userservice: check email: %w", err)
+	if err := auth.ValidatePassword(in.Password, in.Email); err != nil {
+		return 0, err
 	}
-	if exists {
-		return 0, ErrEmailTaken
-	}
-
 	hash, err := auth.HashPassword(in.Password)
 	if err != nil {
-		return 0, fmt.Errorf("userservice: hash password: %w", err)
+		return 0, err
 	}
-
-	id, err := s.repo.CreateUser(ctx, in.Email, hash, in.FullName, in.Role)
+	id, err := s.repo.CreateUser(ctx, in.Email, hash, name, in.Role)
 	if err != nil {
-		return 0, fmt.Errorf("userservice: create: %w", err)
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return 0, ErrEmailTaken
+		}
+		return 0, err
 	}
-
 	if err := s.rbac.SetPrimaryBuiltinRole(ctx, id, string(in.Role)); err != nil {
-		return 0, fmt.Errorf("userservice: sync role: %w", err)
+		return 0, fmt.Errorf("userservice: assign role: %w", err)
 	}
-
 	return id, nil
 }
 
@@ -94,28 +127,32 @@ type UpdateInput struct {
 	IsActive bool
 }
 
-func (s *Service) Update(ctx context.Context, id int64, in UpdateInput) error {
-	in.FullName = strings.TrimSpace(in.FullName)
-
-	if !validRole(in.Role) {
-		return fmt.Errorf("نقش نامعتبر! نقش های مجاز: admin, editor, reader")
-	}
-
-	// Prevent locking out the last admin
-	if in.Role != models.RoleAdmin || !in.IsActive {
-		if err := s.guardLastAdmin(ctx, id); err != nil {
-			return err
-		}
-	}
-
-	if err := s.repo.UpdateUser(ctx, id, in.FullName, in.Role, in.IsActive); err != nil {
+// Update changes name/role/active. actorID protects against self-deactivation.
+func (s *Service) Update(ctx context.Context, id, actorID int64, in UpdateInput) error {
+	name, err := cleanName(in.FullName)
+	if err != nil {
 		return err
 	}
-
+	if !validRole(in.Role) {
+		return api.Invalid("نقش نامعتبر است (admin, editor, viewer)")
+	}
+	if id == actorID && !in.IsActive {
+		return api.Invalid("نمی‌توانید حساب خودتان را غیرفعال کنید")
+	}
+	old, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := s.repo.UpdateUserGuarded(ctx, id, name, in.Role, in.IsActive); err != nil {
+		return err
+	}
 	if err := s.rbac.SetPrimaryBuiltinRole(ctx, id, string(in.Role)); err != nil {
 		return fmt.Errorf("userservice: sync role: %w", err)
 	}
-
+	if !in.IsActive || old.Role != in.Role {
+		_ = s.repo.DeleteAllUserSessions(ctx, id) // force re-login with the new state
+	}
+	s.inv.Invalidate(id)
 	return nil
 }
 
@@ -123,134 +160,159 @@ type ChangePasswordInput struct {
 	UserID      int64
 	OldPassword string
 	NewPassword string
+	KeepSession string // sha256 of the caller's current refresh token (kept alive)
 }
 
 func (s *Service) ChangePassword(ctx context.Context, in ChangePasswordInput) error {
-	if len(in.NewPassword) < 8 {
-		return fmt.Errorf("رمز عبور جدید میبایست حداقل 8 کاراکتر باشد")
-	}
-
-	user, err := s.repo.GetByID(ctx, in.UserID)
+	u, err := s.repo.GetByID(ctx, in.UserID)
 	if err != nil {
-		return fmt.Errorf("userservice: get user: %w", err)
+		return err
 	}
-
-	if err := auth.CheckPassword(in.OldPassword, user.PasswordHash); err != nil {
-		return fmt.Errorf("رمز عبور فعلی اشتباه میباشد")
+	if auth.CheckPassword(in.OldPassword, u.PasswordHash) != nil {
+		return api.Invalid("رمز عبور فعلی صحیح نیست")
 	}
-
+	if in.OldPassword == in.NewPassword {
+		return api.Invalid("رمز عبور جدید باید با رمز فعلی متفاوت باشد")
+	}
+	if err := auth.ValidatePassword(in.NewPassword, u.Email); err != nil {
+		return err
+	}
 	hash, err := auth.HashPassword(in.NewPassword)
 	if err != nil {
-		return fmt.Errorf("userservice: hash password: %w", err)
+		return err
 	}
-
-	return s.repo.UpdatePassword(ctx, in.UserID, hash)
+	if err := s.repo.UpdatePassword(ctx, in.UserID, hash); err != nil {
+		return err
+	}
+	// every OTHER device is signed out
+	return s.repo.DeleteOtherSessions(ctx, in.UserID, in.KeepSession)
 }
 
 func (s *Service) AdminResetPassword(ctx context.Context, userID int64, newPassword string) error {
-	if len(newPassword) < 8 {
-		return fmt.Errorf("رمز عبور میبایست حداقل 8 کاراکتر باشد")
+	u, err := s.repo.GetByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if err := auth.ValidatePassword(newPassword, u.Email); err != nil {
+		return err
 	}
 	hash, err := auth.HashPassword(newPassword)
 	if err != nil {
-		return fmt.Errorf("userservice: hash password: %w", err)
-	}
-	return s.repo.UpdatePassword(ctx, userID, hash)
-}
-
-
-func (s *Service) Delete(ctx context.Context, id int64) error {
-	if err := s.guardLastAdmin(ctx, id); err != nil {
 		return err
 	}
-	return s.repo.DeleteUser(ctx, id)
-}
-
-
-func (s *Service) guardLastAdmin(ctx context.Context, userID int64) error {
-	target, err := s.repo.GetByID(ctx, userID)
-	if err != nil {
+	if err := s.repo.UpdatePassword(ctx, userID, hash); err != nil {
 		return err
 	}
-	if target.Role != models.RoleAdmin {
-		return nil // not an admin, no guard needed
+	if err := s.repo.DeleteAllUserSessions(ctx, userID); err != nil {
+		return err
 	}
-
-	t := true
-	result, err := s.repo.ListUsers(ctx, repository.ListUsersFilter{
-		Role:     models.RoleAdmin,
-		IsActive: &t,
-		Page:     1,
-		PageSize: 2,
-	})
-	if err != nil {
-		return fmt.Errorf("userservice: count admins: %w", err)
-	}
-	if result.Total <= 1 {
-		return ErrLastAdmin
-	}
+	s.inv.Invalidate(userID)
 	return nil
 }
 
-func validRole(r models.Role) bool {
-	return r == models.RoleAdmin || r == models.RoleEditor || r == models.RoleViewer
+func (s *Service) Delete(ctx context.Context, id int64) error {
+	if err := s.repo.DeleteUserGuarded(ctx, id); err != nil {
+		return err
+	}
+	s.inv.Invalidate(id)
+	return nil
 }
 
-var (
-	ErrEmailTaken = fmt.Errorf("کاربری با ایمیل وارد شده وجود دارد")
-	ErrLastAdmin  = fmt.Errorf("امکان حذف و یا تغییر آخرین فعالیت ادمین وجود ندارد")
-)
-
-// ListAuditLogs returns paginated audit log entries.
 func (s *Service) ListAuditLogs(ctx context.Context, f repository.ListAuditFilter) ([]repository.AuditLog, int, error) {
 	return s.repo.ListAuditLogs(ctx, f)
 }
 
-// ── RBAC management ────────────────────────────────────────────────────────────
-
-// GetUserRoleNames returns every role name currently assigned to a user
-// (their primary built-in role plus any extra custom roles).
 func (s *Service) GetUserRoleNames(ctx context.Context, userID int64) ([]string, error) {
 	return s.rbac.GetUserRoleNames(ctx, userID)
 }
 
-// AssignUserRole grants an additional role to a user.
+// AssignUserRole grants an EXTRA custom role. Built-in roles are managed via the user's role field.
 func (s *Service) AssignUserRole(ctx context.Context, userID, roleID, assignedBy int64) error {
-	return s.rbac.AssignUserRole(ctx, userID, roleID, &assignedBy)
+	if _, err := s.repo.GetByID(ctx, userID); err != nil {
+		return err
+	}
+	role, err := s.rbac.GetRoleByID(ctx, roleID)
+	if err != nil {
+		return err
+	}
+	if role.IsBuiltin {
+		return api.Invalid("نقش‌های پیش‌فرض فقط از طریق ویرایش نقش کاربر قابل تغییر هستند")
+	}
+	if err := s.rbac.AssignUserRole(ctx, userID, roleID, &assignedBy); err != nil {
+		return err
+	}
+	s.inv.Invalidate(userID)
+	return nil
 }
 
-// RemoveUserRole revokes a role from a user.
 func (s *Service) RemoveUserRole(ctx context.Context, userID, roleID int64) error {
-	return s.rbac.RemoveUserRole(ctx, userID, roleID)
+	role, err := s.rbac.GetRoleByID(ctx, roleID)
+	if err != nil {
+		return err
+	}
+	if role.IsBuiltin {
+		return api.Invalid("نقش‌های پیش‌فرض فقط از طریق ویرایش نقش کاربر قابل تغییر هستند")
+	}
+	if err := s.rbac.RemoveUserRole(ctx, userID, roleID); err != nil {
+		return err
+	}
+	s.inv.Invalidate(userID)
+	return nil
 }
 
-// ListRoles returns every role with its permission codes.
 func (s *Service) ListRoles(ctx context.Context) ([]models.RoleWithPermissions, error) {
 	return s.rbac.ListRoles(ctx)
 }
 
-// ListPermissions returns the full permission catalog.
 func (s *Service) ListPermissions(ctx context.Context) ([]models.Permission, error) {
 	return s.rbac.ListPermissions(ctx)
 }
 
-// CreateRole creates a new custom role (built-in roles already exist and
-// cannot be duplicated).
 func (s *Service) CreateRole(ctx context.Context, name, description string) (int64, error) {
-	name = strings.TrimSpace(strings.ToLower(name))
-	if name == "" {
-		return 0, fmt.Errorf("نام نقش الزامی است")
+	name = strings.ToLower(strings.TrimSpace(name))
+	if !roleNameRe.MatchString(name) {
+		return 0, api.Invalid("نام نقش باید ۲ تا ۳۲ کاراکتر و فقط شامل حروف انگلیسی کوچک، عدد، خط تیره و زیرخط باشد")
 	}
-	return s.rbac.CreateRole(ctx, name, description)
+	if len([]rune(description)) > 200 {
+		return 0, api.Invalid("توضیحات نباید بیشتر از ۲۰۰ کاراکتر باشد")
+	}
+	id, err := s.rbac.CreateRole(ctx, name, strings.TrimSpace(description))
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return 0, api.Invalid("نقشی با این نام از قبل وجود دارد")
+		}
+		return 0, err
+	}
+	return id, nil
 }
 
-// DeleteRole removes a custom role. Built-in roles (admin/editor/viewer)
-// cannot be deleted — the repository enforces this.
 func (s *Service) DeleteRole(ctx context.Context, roleID int64) error {
-	return s.rbac.DeleteRole(ctx, roleID)
+	if err := s.rbac.DeleteRole(ctx, roleID); err != nil {
+		return err
+	}
+	s.inv.InvalidateAll()
+	return nil
 }
 
-// SetRolePermissions replaces a role's entire permission set.
-func (s *Service) SetRolePermissions(ctx context.Context, roleID int64, permissionCodes []string) error {
-	return s.rbac.SetRolePermissions(ctx, roleID, permissionCodes)
+func (s *Service) SetRolePermissions(ctx context.Context, roleID int64, codes []string) error {
+	role, err := s.rbac.GetRoleByID(ctx, roleID)
+	if err != nil {
+		return err
+	}
+	if role.IsBuiltin && role.Name == string(models.RoleAdmin) {
+		return api.Invalid("دسترسی‌های نقش مدیر قابل تغییر نیست")
+	}
+	bad, err := s.rbac.UnknownPermissions(ctx, codes)
+	if err != nil {
+		return err
+	}
+	if len(bad) > 0 {
+		return api.Invalid("کد دسترسی نامعتبر: " + strings.Join(bad, ", "))
+	}
+	if err := s.rbac.SetRolePermissions(ctx, roleID, codes); err != nil {
+		return err
+	}
+	s.inv.InvalidateAll()
+	return nil
 }

@@ -2,7 +2,9 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 
@@ -86,18 +88,60 @@ func WriteInternalError(w http.ResponseWriter, err error) {
 	WriteJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "مشکلی در سرور داخلی پیش آمده", Code: 500})
 }
 
-func DecodeJSON(w http.ResponseWriter, r *http.Request, dst interface{}) bool {
-	if err := json.NewDecoder(r.Body).Decode(dst); err != nil {
-		WriteBadRequest(w, "invalid JSON body: "+err.Error())
+func decodeBody(w http.ResponseWriter, r *http.Request, dst interface{}, optional bool) bool {
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(dst); err != nil {
+		if optional && errors.Is(err, io.EOF) {
+			return true
+		}
+		var mbe *http.MaxBytesError
+		if errors.As(err, &mbe) {
+			WriteJSON(w, http.StatusRequestEntityTooLarge, ErrorResponse{Error: "حجم درخواست بیش از حد مجاز است", Code: 413})
+			return false
+		}
+		WriteBadRequest(w, "بدنه‌ی درخواست معتبر نیست")
+		return false
+	}
+	if dec.More() {
+		WriteBadRequest(w, "بدنه‌ی درخواست معتبر نیست")
 		return false
 	}
 	return true
 }
 
+// DecodeJSON decodes a required JSON body (strict: unknown fields rejected).
+func DecodeJSON(w http.ResponseWriter, r *http.Request, dst interface{}) bool {
+	return decodeBody(w, r, dst, false)
+}
+
+// DecodeJSONOptional is like DecodeJSON but accepts an empty body.
+func DecodeJSONOptional(w http.ResponseWriter, r *http.Request, dst interface{}) bool {
+	return decodeBody(w, r, dst, true)
+}
+
+// ValidationError is a user-facing (400) error that is safe to show to clients.
+type ValidationError struct{ Msg string }
+
+func (e *ValidationError) Error() string { return e.Msg }
+
+// Invalid builds a ValidationError.
+func Invalid(msg string) error { return &ValidationError{Msg: msg} }
+
+// WriteError maps validation errors to 400 and everything else to a generic 500.
+func WriteError(w http.ResponseWriter, err error) {
+	var ve *ValidationError
+	if errors.As(err, &ve) {
+		WriteBadRequest(w, ve.Msg)
+		return
+	}
+	WriteInternalError(w, err)
+}
+
 func PathID(r *http.Request, name string) (int64, error) {
 	raw := r.PathValue(name)
 	if raw == "" {
-		return 0, fmt.Errorf("missing path parameter: %s", name)
+		return 0, fmt.Errorf("پارامتر مسیر %s وجود ندارد", name)
 	}
 	id, err := strconv.ParseInt(raw, 10, 64)
 	if err != nil {

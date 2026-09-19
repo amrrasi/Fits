@@ -259,3 +259,38 @@ func (r *RBACRepository) RemoveUserRole(ctx context.Context, userID, roleID int6
 	}
 	return nil
 }
+
+// GetRoleByID returns a role definition by id (ErrNotFound if missing).
+func (r *RBACRepository) GetRoleByID(ctx context.Context, id int64) (*models.RoleDef, error) {
+	var rd models.RoleDef
+	err := r.pool.QueryRow(ctx, `SELECT id, name, COALESCE(description,''), is_builtin, created_at FROM roles WHERE id = $1`, id).
+		Scan(&rd.ID, &rd.Name, &rd.Description, &rd.IsBuiltin, &rd.CreatedAt)
+	if err == pgx.ErrNoRows {
+		return nil, ErrNotFound
+	}
+	return &rd, err
+}
+
+// UnknownPermissions returns the codes that do not exist.
+func (r *RBACRepository) UnknownPermissions(ctx context.Context, codes []string) ([]string, error) {
+	rows, err := r.pool.Query(ctx, `SELECT code FROM permissions`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	known := map[string]bool{}
+	for rows.Next() {
+		var c string
+		if err := rows.Scan(&c); err != nil {
+			return nil, err
+		}
+		known[c] = true
+	}
+	var bad []string
+	for _, c := range codes {
+		if !known[c] {
+			bad = append(bad, c)
+		}
+	}
+	return bad, rows.Err()
+}

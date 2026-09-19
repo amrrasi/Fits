@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -39,10 +40,14 @@ func (d DBConfig) DSN() string {
 }
 
 func (d DBConfig) PgxDSN() string {
-	return fmt.Sprintf(
-		"postgres://%s:%s@%s:%d/%s?sslmode=%s",
-		d.User, d.Password, d.Host, d.Port, d.Name, d.SSLMode,
-	)
+	u := url.URL{
+		Scheme:   "postgres",
+		User:     url.UserPassword(d.User, d.Password),
+		Host:     fmt.Sprintf("%s:%d", d.Host, d.Port),
+		Path:     "/" + d.Name,
+		RawQuery: "sslmode=" + url.QueryEscape(d.SSLMode),
+	}
+	return u.String()
 }
 
 type LogConfig struct {
@@ -64,10 +69,9 @@ type AppConfig struct {
 }
 
 type JWTConfig struct {
-	AccessSecret  string
-	RefreshSecret string
-	AccessTTL     time.Duration
-	RefreshTTL    time.Duration
+	AccessSecret string
+	AccessTTL    time.Duration
+	RefreshTTL   time.Duration
 }
 
 type HTTPConfig struct {
@@ -75,14 +79,19 @@ type HTTPConfig struct {
 
 	CORSAllowedOrigins []string
 
-	RateLimitAuthRPS  float64
+	RateLimitAuthRPS   float64
 	RateLimitAuthBurst float64
-	RateLimitAPIRPS   float64
-	RateLimitAPIBurst float64
+	RateLimitAPIRPS    float64
+	RateLimitAPIBurst  float64
 
 	MaxBodyBytes int64
 
 	StaticDir string
+
+	TrustedProxies []string // CIDRs/IPs allowed to set X-Forwarded-For
+	CookieSecure   bool     // Secure flag on the refresh cookie
+	AdminEmail     string   // optional first-admin bootstrap
+	AdminPassword  string
 }
 
 var insecureDefaults = []string{
@@ -103,7 +112,7 @@ func Load(envFile string) (*Config, error) {
 		Host:            getEnv("DB_HOST", "localhost"),
 		Port:            getEnvInt("DB_PORT", 5432),
 		User:            getEnv("DB_USER", "postgres"),
-		Password:        getEnv("DB_PASSWORD", ""),
+		Password:        getEnv("DB_PASSWORD", "amirpopass83"),
 		Name:            getEnv("DB_NAME", "fits_db"),
 		SSLMode:         getEnv("DB_SSLMODE", "disable"),
 		MaxOpenConns:    getEnvInt("DB_MAX_OPEN_CONNS", 25),
@@ -124,10 +133,9 @@ func Load(envFile string) (*Config, error) {
 	}
 
 	cfg.JWT = JWTConfig{
-		AccessSecret:  getEnv("JWT_ACCESS_SECRET", "change-me-access-secret-32chars!!"),
-		RefreshSecret: getEnv("JWT_REFRESH_SECRET", "change-me-refresh-secret-32chars!"),
-		AccessTTL:     getEnvDuration("JWT_ACCESS_TTL", 15*time.Minute),
-		RefreshTTL:    getEnvDuration("JWT_REFRESH_TTL", 7*24*time.Hour),
+		AccessSecret: getEnv("JWT_ACCESS_SECRET", "change-me-access-secret-32chars!!"),
+		AccessTTL:    getEnvDuration("JWT_ACCESS_TTL", 15*time.Minute),
+		RefreshTTL:   getEnvDuration("JWT_REFRESH_TTL", 7*24*time.Hour),
 	}
 
 	cfg.App = AppConfig{
@@ -153,6 +161,10 @@ func Load(envFile string) (*Config, error) {
 		RateLimitAPIBurst:  getEnvFloat("RATE_LIMIT_API_BURST", 120),
 		MaxBodyBytes:       int64(getEnvInt("MAX_BODY_BYTES", 1<<20)), // 1 MB
 		StaticDir:          getEnv("STATIC_DIR", ""),
+		TrustedProxies:     splitCSV(getEnv("TRUSTED_PROXIES", "")),
+		CookieSecure:       getEnvBool("COOKIE_SECURE", getEnv("APP_ENV", "development") == "production"),
+		AdminEmail:         strings.ToLower(strings.TrimSpace(getEnv("ADMIN_EMAIL", "admin@fits.local"))),
+		AdminPassword:      getEnv("ADMIN_PASSWORD", ""),
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -175,26 +187,37 @@ func (c *Config) validate() error {
 		return fmt.Errorf("FITS_BATCH_SIZE must be >= 1")
 	}
 
+	if c.JWT.AccessSecret == "" {
+		return fmt.Errorf("JWT_ACCESS_SECRET must not be empty")
+	}
 	if isProd {
+		for _, o := range c.HTTP.CORSAllowedOrigins {
+			if o == "*" {
+				return fmt.Errorf("CORS_ALLOWED_ORIGINS must not contain * in production")
+			}
+		}
 		for _, bad := range insecureDefaults {
 			if c.JWT.AccessSecret == bad {
 				return fmt.Errorf("JWT_ACCESS_SECRET must be changed from the default in production")
 			}
-			if c.JWT.RefreshSecret == bad {
-				return fmt.Errorf("JWT_REFRESH_SECRET must be changed from the default in production")
-			}
 		}
 		if len(c.JWT.AccessSecret) < 32 {
 			return fmt.Errorf("JWT_ACCESS_SECRET must be at least 32 characters in production")
-		}
-		if len(c.JWT.RefreshSecret) < 32 {
-			return fmt.Errorf("JWT_REFRESH_SECRET must be at least 32 characters in production")
 		}
 	}
 
 	return nil
 }
 
+func splitCSV(v string) []string {
+	var out []string
+	for _, p := range strings.Split(v, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
 
 func getEnv(key, fallback string) string {
 	if v, ok := os.LookupEnv(key); ok {

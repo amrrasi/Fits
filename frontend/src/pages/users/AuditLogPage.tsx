@@ -2,8 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import api from '../../api/client'
 import { PageSpinner, ErrorState, EmptyState, Pagination } from '../../components/ui'
-import { useDebounce } from '../../hooks/useDebounce'
-import type { ApiResponse, PagedResponse } from '../../types'
+import type { PagedResponse } from '../../types'
 import { formatDate } from '../../utils/format'
 import { Shield } from 'lucide-react'
 
@@ -62,8 +61,8 @@ export default function AuditLogPage() {
           <Shield className="w-4 h-4 text-purple-600" />
         </div>
         <div>
-          <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">لاگ‌های ممیزی</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+          <h1 className="text-xl font-bold text-text">لاگ‌های ممیزی</h1>
+          <p className="text-sm text-text-secondary mt-0.5">
             {isLoading ? '...' : `${data?.total ?? 0} رویداد`}
           </p>
         </div>
@@ -109,7 +108,7 @@ export default function AuditLogPage() {
               onChange={(e) => { setDateFrom(e.target.value); setPage(1) }}
               placeholder="از تاریخ"
             />
-            <span className="text-gray-400 dark:text-gray-500 text-sm">تا</span>
+            <span className="text-text-muted text-sm">تا</span>
             <input
               type="date"
               className="input w-40"
@@ -153,31 +152,31 @@ export default function AuditLogPage() {
                 </thead>
                 <tbody>
                   {data.data.map((log) => (
-                    <tr key={log.id} className="hover:bg-gray-50 transition-colors">
+                    <tr key={log.id} className="hover:bg-surface2 transition-colors">
                       <td className="table-td">{actionBadge(log.action)}</td>
                       <td className="table-td">
                         {log.user_email ? (
-                          <span className="text-sm text-gray-700 dark:text-gray-300">{log.user_email}</span>
+                          <span className="text-sm text-text">{log.user_email}</span>
                         ) : (
-                          <span className="text-xs text-gray-400 dark:text-gray-500 italic">سیستم</span>
+                          <span className="text-xs text-text-muted italic">سیستم</span>
                         )}
                       </td>
                       <td className="table-td">
-                        <span className="text-xs font-mono bg-gray-100 dark:bg-white/[0.07] px-1.5 py-0.5 rounded text-gray-600 dark:text-gray-400">
+                        <span className="text-xs font-mono bg-surface2 px-1.5 py-0.5 rounded text-text-secondary">
                           {log.entity_type}
                         </span>
                       </td>
-                      <td className="table-td text-xs text-gray-400 dark:text-gray-500 font-mono">
+                      <td className="table-td text-xs text-text-muted font-mono">
                         {log.entity_id ?? '—'}
                       </td>
-                      <td className="table-td text-xs text-gray-400 dark:text-gray-500 font-mono">
+                      <td className="table-td text-xs text-text-muted font-mono">
                         {log.ip_address ?? '—'}
                       </td>
-                      <td className="table-td text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap">
+                      <td className="table-td text-xs text-text-muted whitespace-nowrap">
                         {formatDate(log.created_at)}
                       </td>
                       <td className="table-td">
-                        {(log.old_value || log.new_value) && (
+                        {!!(log.old_value || log.new_value) && (
                           <ChangeDiff old={log.old_value} next={log.new_value} />
                         )}
                       </td>
@@ -209,27 +208,27 @@ function ChangeDiff({ old: oldVal, next: newVal }: { old: unknown; next: unknown
     <div className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="text-xs text-brand-600 hover:text-brand-800 font-medium"
+        className="text-xs text-accent-600 hover:text-accent-800 font-medium"
       >
         مشاهده
       </button>
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-6 z-50 bg-white dark:bg-white/[0.04] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl p-4 w-80">
-            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2">تغییرات</p>
+          <div className="absolute right-0 top-6 z-50 bg-surface border border-border rounded-xl shadow-xl p-4 w-80">
+            <p className="text-xs font-semibold text-text-secondary mb-2">تغییرات</p>
             {oldVal !== undefined && oldVal !== null && (
               <div className="mb-2">
-                <p className="text-xs text-red-500 font-medium mb-1">قبل:</p>
-                <pre className="text-xs bg-red-50 p-2 rounded-lg overflow-auto max-h-24 text-red-700">
+                <p className="text-xs text-danger font-medium mb-1">قبل:</p>
+                <pre className="text-xs bg-danger-bg p-2 rounded-lg overflow-auto max-h-24 text-danger">
                   {JSON.stringify(oldVal, null, 2)}
                 </pre>
               </div>
             )}
             {newVal !== undefined && newVal !== null && (
               <div>
-                <p className="text-xs text-green-500 font-medium mb-1">بعد:</p>
-                <pre className="text-xs bg-green-50 p-2 rounded-lg overflow-auto max-h-24 text-green-700">
+                <p className="text-xs text-success font-medium mb-1">بعد:</p>
+                <pre className="text-xs bg-success-bg p-2 rounded-lg overflow-auto max-h-24 text-success">
                   {JSON.stringify(newVal, null, 2)}
                 </pre>
               </div>

@@ -35,8 +35,8 @@ export default function JobsPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">پردازش‌های اسکن</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">تاریخچه و وضعیت اسکن‌های FITS</p>
+          <h1 className="text-xl font-bold text-text">پردازش‌های اسکن</h1>
+          <p className="text-sm text-text-secondary mt-0.5">تاریخچه و وضعیت اسکن‌های FITS</p>
         </div>
 
         {isAdmin && (
@@ -60,7 +60,7 @@ export default function JobsPage() {
       </div>
 
       {scanMsg && (
-        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
+        <div className="p-3 bg-info-bg border border-blue-200 rounded-lg text-sm text-info">
           {scanMsg}
         </div>
       )}
@@ -92,22 +92,22 @@ export default function JobsPage() {
                     ? formatDuration(new Date(job.finished_at).getTime() - new Date(job.started_at).getTime())
                     : job.status === 'running' ? 'در حال اجرا…' : '—'
                   return (
-                    <tr key={job.id} className="hover:bg-gray-50">
-                      <td className="table-td font-mono text-gray-400 dark:text-gray-500">#{job.id}</td>
+                    <tr key={job.id} className="hover:bg-surface2">
+                      <td className="table-td font-mono text-text-muted">#{job.id}</td>
                       <td className="table-td"><JobStatusBadge status={job.status} /></td>
-                      <td className="table-td text-gray-500 dark:text-gray-400 max-w-xs truncate font-mono text-xs">{job.scan_dir}</td>
+                      <td className="table-td text-text-secondary max-w-xs truncate font-mono text-xs">{job.scan_dir}</td>
                       <td className="table-td">
-                        <span className="text-green-700">{job.done_files}</span>
-                        <span className="text-gray-400 dark:text-gray-500"> / </span>
+                        <span className="text-success">{job.done_files}</span>
+                        <span className="text-text-muted"> / </span>
                         <span>{job.total_files}</span>
                         {job.error_files > 0 && (
-                          <span className="text-red-600 ml-1">({job.error_files} خطا)</span>
+                          <span className="text-danger ms-1">({job.error_files} خطا)</span>
                         )}
                       </td>
-                      <td className="table-td text-gray-500 dark:text-gray-400 text-xs">{formatDate(job.started_at)}</td>
-                      <td className="table-td text-gray-500 dark:text-gray-400 text-xs">{duration}</td>
+                      <td className="table-td text-text-secondary text-xs">{formatDate(job.started_at)}</td>
+                      <td className="table-td text-text-secondary text-xs">{duration}</td>
                       <td className="table-td">
-                        <Link to={`/jobs/${job.id}`} className="text-brand-600 hover:text-brand-700 inline-flex items-center gap-1 text-sm font-medium">
+                        <Link to={`/jobs/${job.id}`} className="text-accent-600 hover:text-accent-700 inline-flex items-center gap-1 text-sm font-medium">
                           جزئیات <ExternalLink className="w-3 h-3" />
                         </Link>
                       </td>

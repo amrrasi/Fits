@@ -6,7 +6,7 @@ version: "3.9"
 services:
   db:
     ports:
-      - "5432:5432"   # expose for pgAdmin / local tools
+      - "127.0.0.1:5432:5432"   # localhost only (pgAdmin / local tools)
 
   app:
     build:

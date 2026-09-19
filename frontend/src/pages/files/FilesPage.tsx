@@ -11,7 +11,7 @@ import type { FileStatus } from '../../types'
 export default function FilesPage() {
   const [searchParams] = useSearchParams()
   const [page, setPage]     = useState(1)
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useState(searchParams.get('search') ?? '')
   const [status, setStatus] = useState<string>(searchParams.get('status') ?? '')
   const [sort, setSort]     = useState('created_at')
   const [order, setOrder]   = useState('desc')
@@ -35,8 +35,8 @@ export default function FilesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">فایل‌های FITS</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+          <h1 className="text-xl font-bold text-text">فایل‌های FITS</h1>
+          <p className="text-sm text-text-secondary mt-0.5">
             {isLoading ? 'در حال بارگذاری...' : `${data?.total ?? 0} فایل`}
           </p>
         </div>
@@ -46,13 +46,13 @@ export default function FilesPage() {
       <div className="card p-4">
         <div className="flex flex-wrap gap-3 items-center">
           <div className="relative flex-1 min-w-52">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
+            <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
             <input
               type="text"
               placeholder="جستجو در نام فایل..."
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1) }}
-              className="input pl-9"
+              className="input ps-9"
             />
           </div>
 
@@ -70,7 +70,7 @@ export default function FilesPage() {
           </select>
 
           <div className="flex items-center gap-2">
-            <SlidersHorizontal className="w-4 h-4 text-gray-400 dark:text-gray-500 shrink-0" />
+            <SlidersHorizontal className="w-4 h-4 text-text-muted shrink-0" />
             <select value={sort} onChange={(e) => setSort(e.target.value)} className="input w-40">
               <option value="created_at">تاریخ ثبت</option>
               <option value="file_name">نام فایل</option>
@@ -113,24 +113,24 @@ export default function FilesPage() {
                 </thead>
                 <tbody>
                   {data.data.map((file) => (
-                    <tr key={file.id} className="hover:bg-gray-50 transition-colors">
+                    <tr key={file.id} className="hover:bg-surface2 transition-colors">
                       <td className="table-td">
-                        <div className="font-medium text-gray-900 dark:text-gray-100 truncate max-w-xs" title={file.file_path}>
+                        <div className="font-medium text-text truncate max-w-xs" title={file.file_path}>
                           {file.file_name}
                         </div>
-                        <div className="text-xs text-gray-300 dark:text-gray-600 font-mono mt-0.5 truncate max-w-xs">
+                        <div className="text-xs text-text-muted font-mono mt-0.5 truncate max-w-xs">
                           {file.checksum.slice(0, 16)}…
                         </div>
                       </td>
                       <td className="table-td"><FileStatusBadge status={file.status} /></td>
-                      <td className="table-td text-gray-500 dark:text-gray-400">{formatBytes(file.file_size)}</td>
-                      <td className="table-td text-gray-500 dark:text-gray-400">{file.hdu_count}</td>
-                      <td className="table-td text-gray-500 dark:text-gray-400 text-xs">{formatDate(file.processed_at)}</td>
-                      <td className="table-td text-gray-500 dark:text-gray-400 text-xs">{formatDate(file.created_at)}</td>
+                      <td className="table-td text-text-secondary">{formatBytes(file.file_size)}</td>
+                      <td className="table-td text-text-secondary">{file.hdu_count}</td>
+                      <td className="table-td text-text-secondary text-xs">{formatDate(file.processed_at)}</td>
+                      <td className="table-td text-text-secondary text-xs">{formatDate(file.created_at)}</td>
                       <td className="table-td">
                         <Link
                           to={`/files/${file.id}`}
-                          className="text-brand-600 hover:text-brand-700 inline-flex items-center gap-1 text-sm font-medium"
+                          className="text-accent-600 hover:text-accent-700 inline-flex items-center gap-1 text-sm font-medium"
                         >
                           جزئیات <ExternalLink className="w-3 h-3" />
                         </Link>

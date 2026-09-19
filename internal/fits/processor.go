@@ -2,6 +2,7 @@ package fits
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -22,6 +23,9 @@ type Processor struct {
 	headers  *repository.HeaderRepository
 	metadata *repository.MetadataRepository
 	jobs     *repository.JobRepository
+
+	baseCtx context.Context
+	wg      sync.WaitGroup
 }
 
 func NewProcessor(
@@ -42,44 +46,134 @@ func NewProcessor(
 	}
 }
 
-func (p *Processor) Run(ctx context.Context) error {
-	return p.RunWithJob(ctx, 0)
+// ErrScanAlreadyRunning is returned when another scan (API or CLI, any process) holds the lock.
+var ErrScanAlreadyRunning = errors.New("یک اسکن دیگر هم‌اکنون در حال اجراست")
+
+// scanLockKey is a PostgreSQL advisory-lock key. The lock lives on a dedicated connection, so it
+// is released automatically if the process dies - a crash can never leave scanning blocked.
+const scanLockKey int64 = 0x46495453
+
+const scanTimeout = 6 * time.Hour
+
+// SetBaseContext sets the context that background scans inherit (cancelled on shutdown).
+func (p *Processor) SetBaseContext(ctx context.Context) { p.baseCtx = ctx }
+
+// Wait blocks until running background scans finish or the timeout passes.
+func (p *Processor) Wait(timeout time.Duration) {
+	done := make(chan struct{})
+	go func() { p.wg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(timeout):
+	}
 }
 
-func (p *Processor) RunWithJob(ctx context.Context, existingJobID int64) error {
-	start := time.Now()
-
-	var jobID int64
-	var scanTarget string
-	if existingJobID > 0 {
-		job, err := p.jobs.GetByID(ctx, existingJobID)
-		if err != nil {
-			return fmt.Errorf("پردازشگر: بارگذاری جاب %d: %w", existingJobID, err)
-		}
-		jobID = job.ID
-		scanTarget = job.ScanDir
-	} else {
-		scanTarget = p.cfg.ScanDir
-		id, err := p.jobs.Create(ctx, scanTarget)
-		if err != nil {
-			return fmt.Errorf("پردازشگر: ساخت جاب: %w", err)
-		}
-		jobID = id
+func (p *Processor) lock(ctx context.Context) (*pgxpool.Conn, error) {
+	conn, err := p.pool.Acquire(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("پردازشگر: acquire conn: %w", err)
 	}
+	var ok bool
+	if err := conn.QueryRow(ctx, `SELECT pg_try_advisory_lock($1)`, scanLockKey).Scan(&ok); err != nil {
+		conn.Release()
+		return nil, fmt.Errorf("پردازشگر: advisory lock: %w", err)
+	}
+	if !ok {
+		conn.Release()
+		return nil, ErrScanAlreadyRunning
+	}
+	// we hold the lock => no live scan exists => any 'running' row is an orphan from a crash
+	if _, err := conn.Exec(ctx, `UPDATE processing_jobs SET status='failed', finished_at=NOW(),
+		error_message='اسکن به‌صورت ناگهانی متوقف شده بود' WHERE status='running'`); err != nil {
+		logger.S().Warnw("پردازشگر: orphan job cleanup failed", "err", err)
+	}
+	return conn, nil
+}
 
+func (p *Processor) unlock(conn *pgxpool.Conn) {
+	c, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if _, err := conn.Exec(c, `SELECT pg_advisory_unlock($1)`, scanLockKey); err != nil {
+		logger.S().Warnw("پردازشگر: advisory unlock failed", "err", err)
+		conn.Conn().Close(c) // dropping the connection releases the lock
+	}
+	conn.Release()
+}
+
+// finish records the final job state using a fresh context (the scan ctx may already be cancelled).
+func (p *Processor) finish(jobID int64, status models.JobStatus, durationMs int64, msg *string) {
+	c, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := p.jobs.Finish(c, jobID, status, durationMs, msg); err != nil {
+		logger.S().Errorw("پردازشگر: finish job failed", "job_id", jobID, "err", err)
+	}
+}
+
+// Start begins a background scan of scanDir (already validated by the caller) and returns its job id.
+func (p *Processor) Start(scanDir string) (int64, error) {
+	base := p.baseCtx
+	if base == nil {
+		base = context.Background()
+	}
+	conn, err := p.lock(base)
+	if err != nil {
+		return 0, err
+	}
+	jobID, err := p.jobs.Create(base, scanDir)
+	if err != nil {
+		p.unlock(conn)
+		return 0, fmt.Errorf("پردازشگر: ساخت جاب: %w", err)
+	}
+	p.wg.Add(1)
+	go func() {
+		defer p.wg.Done()
+		defer p.unlock(conn)
+		defer func() {
+			if r := recover(); r != nil {
+				msg := fmt.Sprintf("panic: %v", r)
+				logger.S().Errorw("پردازشگر: panic در اسکن", "job_id", jobID, "panic", r)
+				p.finish(jobID, models.JobStatusFailed, 0, &msg)
+			}
+		}()
+		ctx, cancel := context.WithTimeout(base, scanTimeout)
+		defer cancel()
+		if err := p.execute(ctx, jobID, scanDir); err != nil {
+			logger.S().Errorw("پردازشگر: scan failed", "job_id", jobID, "err", err)
+		}
+	}()
+	return jobID, nil
+}
+
+// Run scans the configured directory synchronously (CLI mode).
+func (p *Processor) Run(ctx context.Context) error {
+	conn, err := p.lock(ctx)
+	if err != nil {
+		return err
+	}
+	defer p.unlock(conn)
+	jobID, err := p.jobs.Create(ctx, p.cfg.ScanDir)
+	if err != nil {
+		return fmt.Errorf("پردازشگر: ساخت جاب: %w", err)
+	}
+	ctx, cancel := context.WithTimeout(ctx, scanTimeout)
+	defer cancel()
+	return p.execute(ctx, jobID, p.cfg.ScanDir)
+}
+
+func (p *Processor) execute(ctx context.Context, jobID int64, scanTarget string) error {
+	start := time.Now()
 	log := logger.S().With("scan_dir", scanTarget, "job_id", jobID)
-	log.Info("پردازشگر: در حال شروع ...")
 	log.Infow("پردازشگر: پردازش شروع شد")
 
 	paths, err := ScanDir(scanTarget)
 	if err != nil {
 		msg := err.Error()
-		_ = p.jobs.Finish(ctx, jobID, models.JobStatusFailed, 0, &msg)
+		p.finish(jobID, models.JobStatusFailed, 0, &msg)
 		return fmt.Errorf("پردازشگر: اسکن: %w", err)
 	}
 	if len(paths) == 0 {
 		log.Warn("پردازشگر: فایل فیتسی یافت نشد")
-		_ = p.jobs.Finish(ctx, jobID, models.JobStatusCompleted, time.Since(start).Milliseconds(), nil)
+		p.finish(jobID, models.JobStatusCompleted, time.Since(start).Milliseconds(), nil)
 		return nil
 	}
 
@@ -152,7 +246,7 @@ func (p *Processor) RunWithJob(ctx context.Context, existingJobID int64) error {
 		finalStatus = models.JobStatusPartiallyFailed
 	}
 
-	_ = p.jobs.Finish(ctx, jobID, finalStatus, durationMs, nil)
+	p.finish(jobID, finalStatus, durationMs, nil)
 
 	log.Infow("پردازشگر: انجام شد ",
 		"total", len(paths),
@@ -259,8 +353,11 @@ func (p *Processor) processFile(ctx context.Context, jobID int64, path string) (
 
 	result.Metadata.FileID = fileID
 	if err := p.metadata.Upsert(ctx, tx, fileID, &result.Metadata); err != nil {
-		log.Warnw("پردازشگر: metadata upsert failed (non-fatal)", "err", err)
-
+		// a failed statement aborts the whole transaction, so this cannot be "non-fatal"
+		_ = p.jobs.InsertError(ctx, &models.ProcessingError{
+			JobID: jobID, FileID: &fileID, FilePath: path, Stage: "insert", Message: err.Error(),
+		})
+		return "", fmt.Errorf("upsert metadata: %w", err)
 	}
 
 	processingMs := time.Since(start).Milliseconds()

@@ -1,3 +1,4 @@
+import { errorMessage } from '../../api/client'
 import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -6,7 +7,7 @@ import {
   FileStatusBadge, PageSpinner, ErrorState, EmptyState, Pagination, Modal, Spinner
 } from '../../components/ui'
 import { useAuth } from '../../context/AuthContext'
-import { ArrowLeft, Pencil, History } from 'lucide-react'
+import { ArrowRight, Pencil } from 'lucide-react'
 import { formatBytes, formatDate } from '../../utils/format'
 import type { FITSMetadata } from '../../types'
 
@@ -55,30 +56,30 @@ export default function FileDetailPage() {
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Link to="/files" className="text-gray-400 dark:text-gray-500 hover:text-gray-600">
-          <ArrowLeft className="w-5 h-5" />
+        <Link to="/files" className="text-text-muted hover:text-text">
+          <ArrowRight className="w-5 h-5" />
         </Link>
         <div className="flex-1 min-w-0">
-          <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100 truncate">{file.file_name}</h1>
+          <h1 className="text-xl font-bold text-text truncate">{file.file_name}</h1>
           <div className="flex items-center gap-3 mt-1">
             <FileStatusBadge status={file.status} />
-            <span className="text-sm text-gray-400 dark:text-gray-500">{formatBytes(file.file_size)}</span>
-            <span className="text-sm text-gray-400 dark:text-gray-500">{file.hdu_count} HDU</span>
-            <span className="text-xs text-gray-400 dark:text-gray-500 font-mono">{file.checksum.slice(0, 20)}…</span>
+            <span className="text-sm text-text-muted">{formatBytes(file.file_size)}</span>
+            <span className="text-sm text-text-muted">{file.hdu_count} HDU</span>
+            <span className="text-xs text-text-muted font-mono">{file.checksum.slice(0, 20)}…</span>
           </div>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 dark:border-white/10">
+      <div className="border-b border-border">
         {(['metadata', 'headers', 'history'] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
               tab === t
-                ? 'border-brand-600 text-brand-700'
-                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700'
+                ? 'border-accent-600 text-accent-700'
+                : 'border-transparent text-text-secondary hover:text-text'
             }`}
           >
             {t === 'metadata' ? 'متادیتا' : t === 'headers' ? 'هدرها' : 'تاریخچه ویرایش'}
@@ -104,7 +105,7 @@ export default function FileDetailPage() {
       {/* Headers tab */}
       {tab === 'headers' && (
         <div className="card overflow-hidden">
-          <div className="p-4 border-b border-gray-200 dark:border-white/10">
+          <div className="p-4 border-b border-border">
             <input
               className="input max-w-sm"
               placeholder="جستجو در keyword یا value..."
@@ -129,12 +130,12 @@ export default function FileDetailPage() {
                   </thead>
                   <tbody>
                     {headersQ.data.data.map((h) => (
-                      <tr key={h.id} className="hover:bg-gray-50">
-                        <td className="table-td text-center text-gray-400 dark:text-gray-500">{h.hdu_index}</td>
-                        <td className="table-td font-mono text-xs font-semibold text-brand-700">{h.keyword}</td>
-                        <td className="table-td font-mono text-xs text-gray-800 dark:text-gray-200 max-w-xs truncate">{h.value}</td>
-                        <td className="table-td text-xs text-gray-400 dark:text-gray-500 max-w-xs truncate">{h.comment}</td>
-                        <td className="table-td text-xs text-gray-400 dark:text-gray-500">{h.value_type}</td>
+                      <tr key={h.id} className="hover:bg-surface2">
+                        <td className="table-td text-center text-text-muted">{h.hdu_index}</td>
+                        <td className="table-td font-mono text-xs font-semibold text-accent-700">{h.keyword}</td>
+                        <td className="table-td font-mono text-xs text-text max-w-xs truncate">{h.value}</td>
+                        <td className="table-td text-xs text-text-muted max-w-xs truncate">{h.comment}</td>
+                        <td className="table-td text-xs text-text-muted">{h.value_type}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -170,12 +171,12 @@ export default function FileDetailPage() {
               </thead>
               <tbody>
                 {historyQ.data.map((o) => (
-                  <tr key={o.id} className="hover:bg-gray-50">
-                    <td className="table-td font-mono text-xs font-semibold text-brand-700">{o.field_name}</td>
-                    <td className="table-td text-xs text-gray-400 dark:text-gray-500">{o.original_value ?? '—'}</td>
-                    <td className="table-td text-xs font-medium text-gray-800 dark:text-gray-200">{o.new_value}</td>
-                    <td className="table-td text-xs text-gray-400 dark:text-gray-500">{o.reason ?? '—'}</td>
-                    <td className="table-td text-xs text-gray-400 dark:text-gray-500">{formatDate(o.created_at)}</td>
+                  <tr key={o.id} className="hover:bg-surface2">
+                    <td className="table-td font-mono text-xs font-semibold text-accent-700">{o.field_name}</td>
+                    <td className="table-td text-xs text-text-muted">{o.original_value ?? '—'}</td>
+                    <td className="table-td text-xs font-medium text-text">{o.new_value}</td>
+                    <td className="table-td text-xs text-text-muted">{o.reason ?? '—'}</td>
+                    <td className="table-td text-xs text-text-muted">{formatDate(o.created_at)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -190,7 +191,7 @@ export default function FileDetailPage() {
           fieldName={editField.name}
           currentValue={editField.current}
           loading={editMutation.isPending}
-          error={editMutation.error?.message}
+          error={editMutation.error ? errorMessage(editMutation.error) : undefined}
           onClose={() => setEditField(null)}
           onSave={(value, reason) => editMutation.mutate({ field: editField.name, value, reason })}
         />
@@ -261,10 +262,10 @@ function MetadataTable({ meta, canEdit, onEdit }: {
   onEdit: (name: string, current: string) => void
 }) {
   return (
-    <div className="divide-y divide-gray-100">
+    <div className="divide-y divide-border">
       {metadataGroups.map((group) => (
         <div key={group.title} className="p-4">
-          <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">{group.title}</h3>
+          <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-3">{group.title}</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-3">
             {group.fields.map(({ key, label, unit }) => {
               const rawVal = meta[key]
@@ -273,18 +274,18 @@ function MetadataTable({ meta, canEdit, onEdit }: {
               return (
                 <div key={key} className="flex items-start justify-between gap-2 group">
                   <div className="min-w-0 flex-1">
-                    <div className="text-xs text-gray-400 dark:text-gray-500">{label}{unit ? ` (${unit})` : ''}</div>
-                    <div className={`text-sm font-medium mt-0.5 ${val ? 'text-gray-900 dark:text-gray-100' : 'text-gray-300 dark:text-gray-600'}`}>
+                    <div className="text-xs text-text-muted">{label}{unit ? ` (${unit})` : ''}</div>
+                    <div className={`text-sm font-medium mt-0.5 ${val ? 'text-text' : 'text-text-muted'}`}>
                       {val ?? '—'}
                     </div>
                   </div>
                   {isEditable && (
                     <button
                       onClick={() => onEdit(key as string, val ?? '')}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-gray-100 shrink-0 mt-0.5"
+                      className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-surface2 shrink-0 mt-0.5"
                       title="ویرایش"
                     >
-                      <Pencil className="w-3 h-3 text-gray-400 dark:text-gray-500" />
+                      <Pencil className="w-3 h-3 text-text-muted" />
                     </button>
                   )}
                 </div>
@@ -321,7 +322,7 @@ function EditMetadataModal({ fieldName, currentValue, loading, error, onClose, o
           <label className="label">دلیل تغییر (اختیاری)</label>
           <input className="input" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="مثال: اصلاح نام شیء" />
         </div>
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-danger">{error}</p>}
         <div className="flex gap-3 pt-2">
           <button onClick={() => onSave(value, reason)} disabled={loading || !value} className="btn-primary flex-1">
             {loading ? <><Spinner className="w-4 h-4 text-white" />در حال ذخیره...</> : 'ذخیره'}

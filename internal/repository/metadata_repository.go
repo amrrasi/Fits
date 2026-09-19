@@ -132,32 +132,32 @@ func (r *MetadataRepository) GetByFileID(ctx context.Context, fileID int64) (*mo
 
 // ListMetadataFilter for the files list with science filters.
 type ListMetadataFilter struct {
-	Object      string
-	Filter      string
-	Instrume    string
-	Telescop    string
-	DateFrom    *time.Time
-	DateTo      *time.Time
-	ExpTimeMin  *float64
-	ExpTimeMax  *float64
-	RAMin       *float64
-	RAMax       *float64
-	DecMin      *float64
-	DecMax      *float64
+	Object     string
+	Filter     string
+	Instrume   string
+	Telescop   string
+	DateFrom   *time.Time
+	DateTo     *time.Time
+	ExpTimeMin *float64
+	ExpTimeMax *float64
+	RAMin      *float64
+	RAMax      *float64
+	DecMin     *float64
+	DecMax     *float64
 }
 
 // ── Overrides ──────────────────────────────────────────────────────────────────
 
 // MetadataOverride is one edit record from metadata_overrides.
 type MetadataOverride struct {
-	ID            int64      `json:"id"`
-	FileID        int64      `json:"file_id"`
-	FieldName     string     `json:"field_name"`
-	OriginalValue *string    `json:"original_value"`
-	NewValue      string     `json:"new_value"`
-	Reason        *string    `json:"reason"`
-	EditedBy      *int64     `json:"edited_by"`
-	CreatedAt     time.Time  `json:"created_at"`
+	ID            int64     `json:"id"`
+	FileID        int64     `json:"file_id"`
+	FieldName     string    `json:"field_name"`
+	OriginalValue *string   `json:"original_value"`
+	NewValue      string    `json:"new_value"`
+	Reason        *string   `json:"reason"`
+	EditedBy      *int64    `json:"edited_by"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 // InsertOverride records a metadata edit. Does NOT apply the change to fits_metadata —
@@ -240,3 +240,29 @@ func allowedEditFields() map[string]struct{} {
 
 // AllowedEditFields is exported so the handler can validate before calling.
 func AllowedEditFields() map[string]struct{} { return allowedEditFields() }
+
+// EditFieldTx records the override AND applies the new value in ONE transaction.
+func (r *MetadataRepository) EditFieldTx(ctx context.Context, o *MetadataOverride) error {
+	if _, ok := allowedEditFields()[o.FieldName]; !ok {
+		return fmt.Errorf("metadata_repo: field %q is not editable", o.FieldName)
+	}
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	q := fmt.Sprintf(`UPDATE fits_metadata SET %s=$2, updated_at=NOW() WHERE file_id=$1`, strings.ToLower(o.FieldName))
+	tag, err := tx.Exec(ctx, q, o.FileID, o.NewValue)
+	if err != nil {
+		return fmt.Errorf("metadata_repo: apply field update: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO metadata_overrides (file_id, field_name, original_value, new_value, reason, edited_by)
+		VALUES ($1, $2, $3, $4, $5, $6)`, o.FileID, o.FieldName, o.OriginalValue, o.NewValue, o.Reason, o.EditedBy); err != nil {
+		return fmt.Errorf("metadata_repo: insert override: %w", err)
+	}
+	return tx.Commit(ctx)
+}

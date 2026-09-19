@@ -52,8 +52,8 @@ export default function UsersPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">مدیریت کاربران</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+          <h1 className="text-xl font-bold text-text">مدیریت کاربران</h1>
+          <p className="text-sm text-text-secondary mt-0.5">
             {isLoading ? '...' : `${data?.total ?? 0} کاربر`}
           </p>
         </div>
@@ -67,9 +67,9 @@ export default function UsersPage() {
       <div className="card p-4">
         <div className="flex flex-wrap gap-3 items-center">
           <div className="relative flex-1 min-w-52">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
+            <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
             <input
-              className="input pl-9"
+              className="input ps-9"
               placeholder="جستجو در ایمیل یا نام..."
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1) }}
@@ -114,22 +114,22 @@ export default function UsersPage() {
                 </thead>
                 <tbody>
                   {data.data.map((u) => (
-                    <tr key={u.id} className="hover:bg-gray-50 transition-colors">
+                    <tr key={u.id} className="hover:bg-surface2 transition-colors">
                       <td className="table-td">
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-brand-100 flex items-center justify-center shrink-0">
-                            <span className="text-xs font-bold text-brand-700">
+                          <div className="w-8 h-8 rounded-full bg-accent-100 flex items-center justify-center shrink-0">
+                            <span className="text-xs font-bold text-accent-700">
                               {(u.full_name || u.email).charAt(0).toUpperCase()}
                             </span>
                           </div>
                           <div>
-                            <div className="font-medium text-gray-900 dark:text-gray-100 text-sm">
-                              {u.full_name || <span className="text-gray-400 dark:text-gray-500 italic">بدون نام</span>}
+                            <div className="font-medium text-text text-sm">
+                              {u.full_name || <span className="text-text-muted italic">بدون نام</span>}
                               {u.id === me?.id && (
-                                <span className="ml-2 text-xs bg-brand-50 text-brand-600 px-1.5 py-0.5 rounded">شما</span>
+                                <span className="ms-2 text-xs bg-accent-50 text-accent-600 px-1.5 py-0.5 rounded">شما</span>
                               )}
                             </div>
-                            <div className="text-xs text-gray-400 dark:text-gray-500">{u.email}</div>
+                            <div className="text-xs text-text-muted">{u.email}</div>
                           </div>
                         </div>
                       </td>
@@ -139,27 +139,27 @@ export default function UsersPage() {
                           {u.is_active ? 'فعال' : 'غیرفعال'}
                         </span>
                       </td>
-                      <td className="table-td text-gray-500 dark:text-gray-400 text-xs">{formatDate(u.last_login_at)}</td>
-                      <td className="table-td text-gray-500 dark:text-gray-400 text-xs">{formatDate(u.created_at)}</td>
+                      <td className="table-td text-text-secondary text-xs">{formatDate(u.last_login_at)}</td>
+                      <td className="table-td text-text-secondary text-xs">{formatDate(u.created_at)}</td>
                       <td className="table-td">
                         <div className="flex items-center gap-1">
                           <Link
                             to={`/users/${u.id}`}
-                            className="btn-ghost p-1.5 text-gray-400 dark:text-gray-500 hover:text-brand-600"
+                            className="btn-ghost p-1.5 text-text-muted hover:text-accent-600"
                             title="مشاهده جزئیات"
                           >
                             <Eye className="w-3.5 h-3.5" />
                           </Link>
                           <button
                             onClick={() => setEditUser(u)}
-                            className="btn-ghost p-1.5 text-gray-400 dark:text-gray-500 hover:text-blue-600"
+                            className="btn-ghost p-1.5 text-text-muted hover:text-info"
                             title="ویرایش"
                           >
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => setResetUser(u)}
-                            className="btn-ghost p-1.5 text-gray-400 dark:text-gray-500 hover:text-yellow-600"
+                            className="btn-ghost p-1.5 text-text-muted hover:text-warning"
                             title="ریست رمز"
                           >
                             <KeyRound className="w-3.5 h-3.5" />
@@ -167,7 +167,7 @@ export default function UsersPage() {
                           {u.id !== me?.id && (
                             <button
                               onClick={() => setDeleteUser(u)}
-                              className="btn-ghost p-1.5 text-gray-400 dark:text-gray-500 hover:text-red-600 hover:bg-red-50"
+                              className="btn-ghost p-1.5 text-text-muted hover:text-danger hover:bg-danger-bg"
                               title="حذف"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -198,21 +198,21 @@ export default function UsersPage() {
       {deleteUser  && (
         <Modal title="حذف کاربر" onClose={() => setDeleteUser(null)}>
           <div className="mb-5">
-            <p className="text-sm text-gray-600 dark:text-gray-400">
+            <p className="text-sm text-text-secondary">
               آیا مطمئنید می‌خواهید کاربر زیر را حذف کنید؟
             </p>
-            <div className="mt-3 flex items-center gap-3 p-3 bg-gray-50 dark:bg-white/[0.03] rounded-lg">
+            <div className="mt-3 flex items-center gap-3 p-3 bg-surface2 rounded-lg">
               <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center shrink-0">
-                <span className="text-xs font-bold text-red-700">
+                <span className="text-xs font-bold text-danger">
                   {deleteUser.email.charAt(0).toUpperCase()}
                 </span>
               </div>
               <div>
-                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{deleteUser.full_name || deleteUser.email}</div>
-                <div className="text-xs text-gray-400 dark:text-gray-500">{deleteUser.email}</div>
+                <div className="text-sm font-medium text-text">{deleteUser.full_name || deleteUser.email}</div>
+                <div className="text-xs text-text-muted">{deleteUser.email}</div>
               </div>
             </div>
-            <p className="text-xs text-red-600 mt-3">این عملیات غیرقابل بازگشت است.</p>
+            <p className="text-xs text-danger mt-3">این عملیات غیرقابل بازگشت است.</p>
           </div>
           <div className="flex gap-3">
             <button
@@ -251,13 +251,13 @@ function CreateUserModal({ onClose }: { onClose: () => void }) {
     },
   })
 
-  const valid = form.email && form.password.length >= 8
+  const valid = form.email && form.password.length >= 10
 
   return (
     <Modal title="ایجاد کاربر جدید" onClose={onClose}>
       <div className="space-y-4">
         <div>
-          <label className="label">ایمیل <span className="text-red-500">*</span></label>
+          <label className="label">ایمیل <span className="text-danger">*</span></label>
           <input
             className="input"
             type="email"
@@ -277,16 +277,16 @@ function CreateUserModal({ onClose }: { onClose: () => void }) {
           />
         </div>
         <div>
-          <label className="label">رمز عبور <span className="text-red-500">*</span></label>
+          <label className="label">رمز عبور <span className="text-danger">*</span></label>
           <input
             className="input"
             type="password"
-            placeholder="حداقل ۸ کاراکتر"
+            placeholder="حداقل ۱۰ کاراکتر (ترکیب حروف و عدد)"
             value={form.password}
             onChange={(e) => setForm({ ...form, password: e.target.value })}
           />
-          {form.password.length > 0 && form.password.length < 8 && (
-            <p className="text-xs text-red-500 mt-1">رمز عبور باید حداقل ۸ کاراکتر باشد</p>
+          {form.password.length > 0 && form.password.length < 10 && (
+            <p className="text-xs text-danger mt-1">رمز عبور باید حداقل ۱۰ کاراکتر (ترکیب حروف و عدد) باشد</p>
           )}
         </div>
         <div>
@@ -297,7 +297,7 @@ function CreateUserModal({ onClose }: { onClose: () => void }) {
             <option value="admin">Admin — دسترسی کامل</option>
           </select>
         </div>
-        {error && <p className="text-sm text-red-600 bg-red-50 p-2 rounded-lg">{error}</p>}
+        {error && <p className="text-sm text-danger bg-danger-bg p-2 rounded-lg">{error}</p>}
         <div className="flex gap-3 pt-1">
           <button
             onClick={() => mutation.mutate()}
@@ -361,19 +361,19 @@ function EditUserModal({ user, onClose }: { user: SafeUser; onClose: () => void 
             <option value="admin">Admin — دسترسی کامل</option>
           </select>
         </div>
-        <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:bg-gray-50 border border-gray-200 dark:border-white/10">
+        <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:bg-surface2 border border-border">
           <input
             type="checkbox"
             checked={form.is_active}
             onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
-            className="w-4 h-4 rounded accent-brand-600"
+            className="w-4 h-4 rounded accent-accent-600"
           />
           <div>
-            <div className="text-sm font-medium text-gray-800 dark:text-gray-200">حساب فعال</div>
-            <div className="text-xs text-gray-400 dark:text-gray-500">کاربر غیرفعال نمی‌تواند وارد شود</div>
+            <div className="text-sm font-medium text-text">حساب فعال</div>
+            <div className="text-xs text-text-muted">کاربر غیرفعال نمی‌تواند وارد شود</div>
           </div>
         </label>
-        {error && <p className="text-sm text-red-600 bg-red-50 p-2 rounded-lg">{error}</p>}
+        {error && <p className="text-sm text-danger bg-danger-bg p-2 rounded-lg">{error}</p>}
         <div className="flex gap-3 pt-1">
           <button onClick={() => mutation.mutate()} disabled={mutation.isPending} className="btn-primary flex-1">
             {mutation.isPending ? <><Spinner className="w-4 h-4 text-white" />در حال ذخیره...</> : 'ذخیره تغییرات'}
@@ -408,7 +408,7 @@ function ResetPasswordModal({ user, onClose }: { user: SafeUser; onClose: () => 
 
   const handleSubmit = () => {
     setError('')
-    if (password.length < 8) { setError('رمز باید حداقل ۸ کاراکتر باشد'); return }
+    if (password.length < 10) { setError('رمز باید حداقل ۱۰ کاراکتر و ترکیبی از حروف و عدد باشد'); return }
     if (password !== confirm) { setError('تکرار رمز مطابقت ندارد'); return }
     mutation.mutate()
   }
@@ -420,7 +420,7 @@ function ResetPasswordModal({ user, onClose }: { user: SafeUser; onClose: () => 
           <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
             <span className="text-2xl">✅</span>
           </div>
-          <p className="text-sm font-medium text-gray-800 dark:text-gray-200">رمز با موفقیت تغییر کرد</p>
+          <p className="text-sm font-medium text-text">رمز با موفقیت تغییر کرد</p>
           <button onClick={onClose} className="btn-secondary mt-4">بستن</button>
         </div>
       ) : (
@@ -430,7 +430,7 @@ function ResetPasswordModal({ user, onClose }: { user: SafeUser; onClose: () => 
             <input
               className="input"
               type="password"
-              placeholder="حداقل ۸ کاراکتر"
+              placeholder="حداقل ۱۰ کاراکتر (ترکیب حروف و عدد)"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoFocus
@@ -446,7 +446,7 @@ function ResetPasswordModal({ user, onClose }: { user: SafeUser; onClose: () => 
               onChange={(e) => setConfirm(e.target.value)}
             />
           </div>
-          {error && <p className="text-sm text-red-600 bg-red-50 p-2 rounded-lg">{error}</p>}
+          {error && <p className="text-sm text-danger bg-danger-bg p-2 rounded-lg">{error}</p>}
           <div className="flex gap-3 pt-1">
             <button
               onClick={handleSubmit}

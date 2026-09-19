@@ -1,79 +1,156 @@
 import React from 'react'
-import { Loader2, AlertCircle, Inbox, ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { Loader2, AlertCircle, Inbox, ChevronLeft, ChevronRight } from 'lucide-react'
 import type { FileStatus, JobStatus } from '../../types'
 import clsx from 'clsx'
 
 // ── Spinner ───────────────────────────────────────────────────────────────────
 
 export function Spinner({ className }: { className?: string }) {
-  return <Loader2 className={clsx('animate-spin', className ?? 'w-5 h-5 text-brand-600 dark:text-brand-400')} />
+  return <Loader2 className={clsx('animate-spin', className ?? 'w-5 h-5 text-accent-600')} />
 }
 
 export function PageSpinner() {
   return (
     <div className="flex items-center justify-center h-64">
-      <Spinner className="w-8 h-8 text-brand-600 dark:text-brand-400" />
+      <Spinner className="w-6 h-6 text-accent-600" />
     </div>
   )
 }
 
-// ── Status Badges ─────────────────────────────────────────────────────────────
+// ── Status pills — subtle dot + tinted text, not loud filled badges ──────────
 
-const fileStatusMap: Record<FileStatus, { label: string; className: string }> = {
-  done:       { label: 'انجام‌شده',   className: 'badge-green' },
-  processing: { label: 'در حال پردازش', className: 'badge-blue' },
-  pending:    { label: 'در صف',       className: 'badge-yellow' },
-  error:      { label: 'خطا',         className: 'badge-red' },
-  skipped:    { label: 'رد شده',      className: 'badge-gray' },
+const fileStatusMap: Record<FileStatus, { label: string; cls: string }> = {
+  done:       { label: 'تکمیل‌شده', cls: 'pill-success' },
+  processing: { label: 'در حال پردازش', cls: 'pill-info' },
+  pending:    { label: 'در صف', cls: 'pill-warning' },
+  error:      { label: 'خطا', cls: 'pill-danger' },
+  skipped:    { label: 'رد شده (تکراری)', cls: 'pill-neutral' },
 }
 
-const jobStatusMap: Record<JobStatus, { label: string; className: string }> = {
-  completed:        { label: 'تکمیل‌شده',  className: 'badge-green' },
-  running:          { label: 'در حال اجرا', className: 'badge-blue' },
-  partially_failed: { label: 'ناقص',       className: 'badge-yellow' },
-  failed:           { label: 'ناموفق',     className: 'badge-red' },
-  cancelled:        { label: 'لغوشده',     className: 'badge-gray' },
+const jobStatusMap: Record<JobStatus, { label: string; cls: string }> = {
+  completed:        { label: 'تکمیل‌شده', cls: 'pill-success' },
+  running:          { label: 'در حال اجرا', cls: 'pill-info' },
+  partially_failed: { label: 'ناقص', cls: 'pill-warning' },
+  failed:           { label: 'ناموفق', cls: 'pill-danger' },
+  cancelled:        { label: 'لغوشده', cls: 'pill-neutral' },
+}
+
+const dotColor: Record<string, string> = {
+  'pill-success': 'bg-success',
+  'pill-info':    'bg-info',
+  'pill-warning': 'bg-warning',
+  'pill-danger':  'bg-danger',
+  'pill-neutral': 'bg-text-muted',
+}
+
+function StatusPill({ label, cls }: { label: string; cls: string }) {
+  return (
+    <span className={cls}>
+      <span className={clsx('pill-dot', dotColor[cls])} />
+      {label}
+    </span>
+  )
 }
 
 export function FileStatusBadge({ status }: { status: FileStatus }) {
-  const cfg = fileStatusMap[status] ?? { label: status, className: 'badge-gray' }
-  return <span className={cfg.className}>{cfg.label}</span>
+  const cfg = fileStatusMap[status] ?? { label: status, cls: 'pill-neutral' }
+  return <StatusPill {...cfg} />
 }
 
 export function JobStatusBadge({ status }: { status: JobStatus }) {
-  const cfg = jobStatusMap[status] ?? { label: status, className: 'badge-gray' }
-  return <span className={cfg.className}>{cfg.label}</span>
+  const cfg = jobStatusMap[status] ?? { label: status, cls: 'pill-neutral' }
+  return <StatusPill {...cfg} />
 }
 
+const roleLabel: Record<string, string> = { admin: 'مدیر', editor: 'ویرایشگر', viewer: 'مشاهده‌گر' }
+
 export function RoleBadge({ role }: { role: string }) {
-  const cls = role === 'admin' ? 'badge-red' : role === 'editor' ? 'badge-blue' : 'badge-gray'
-  return <span className={cls}>{role}</span>
+  const cls = role === 'admin' ? 'pill-danger' : role === 'editor' ? 'pill-info' : 'pill-neutral'
+  return <StatusPill label={roleLabel[role] ?? role} cls={cls} />
+}
+
+// ── Page structure primitives ────────────────────────────────────────────────
+
+export function PageHeader({
+  title, description, actions,
+}: { title: string; description?: string; actions?: React.ReactNode }) {
+  return (
+    <div className="flex items-start justify-between gap-4 mb-5">
+      <div>
+        <h1 className="text-lg font-semibold text-text">{title}</h1>
+        {description && <p className="text-sm text-text-secondary mt-0.5">{description}</p>}
+      </div>
+      {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
+    </div>
+  )
+}
+
+export function Section({
+  title, description, actions, children, className,
+}: { title?: string; description?: string; actions?: React.ReactNode; children: React.ReactNode; className?: string }) {
+  return (
+    <section className={clsx('panel', className)}>
+      {(title || actions) && (
+        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border">
+          <div>
+            {title && <h2 className="text-sm font-semibold text-text">{title}</h2>}
+            {description && <p className="text-xs text-text-secondary mt-0.5">{description}</p>}
+          </div>
+          {actions}
+        </div>
+      )}
+      {children}
+    </section>
+  )
+}
+
+export function Stat({ label, value, hint }: { label: string; value: React.ReactNode; hint?: string }) {
+  return (
+    <div className="panel px-4 py-3">
+      <p className="text-xs text-text-secondary">{label}</p>
+      <p className="text-xl font-semibold text-text mt-1 font-mono">{value}</p>
+      {hint && <p className="text-xs text-text-muted mt-0.5">{hint}</p>}
+    </div>
+  )
+}
+
+export function Skeleton({ className }: { className?: string }) {
+  return <div className={clsx('animate-pulse rounded bg-surface2', className ?? 'h-4 w-full')} />
+}
+
+export function TableSkeleton({ rows = 6, cols = 5 }: { rows?: number; cols?: number }) {
+  return (
+    <div className="divide-y divide-border">
+      {Array.from({ length: rows }).map((_, r) => (
+        <div key={r} className="flex items-center gap-4 px-3 py-3">
+          {Array.from({ length: cols }).map((__, c) => (
+            <Skeleton key={c} className={clsx('h-3.5', c === 0 ? 'w-1/4' : 'flex-1')} />
+          ))}
+        </div>
+      ))}
+    </div>
+  )
 }
 
 // ── Empty / Error states ──────────────────────────────────────────────────────
 
-export function EmptyState({ title, description }: { title: string; description?: string }) {
+export function EmptyState({ title, description, action }: { title: string; description?: string; action?: React.ReactNode }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 text-center enter-pop">
-      <div className="w-14 h-14 rounded-2xl grid place-items-center mb-3
-                      bg-gray-100 dark:bg-white/[0.05]">
-        <Inbox className="w-6 h-6 text-gray-400 dark:text-gray-500" />
-      </div>
-      <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{title}</h3>
-      {description && <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 max-w-xs">{description}</p>}
+    <div className="flex flex-col items-center justify-center py-16 text-center px-4">
+      <Inbox className="w-9 h-9 text-text-muted mb-3" strokeWidth={1.5} />
+      <h3 className="text-sm font-semibold text-text">{title}</h3>
+      {description && <p className="text-sm text-text-secondary mt-1 max-w-xs">{description}</p>}
+      {action && <div className="mt-4">{action}</div>}
     </div>
   )
 }
 
 export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 text-center enter-pop">
-      <div className="w-14 h-14 rounded-2xl grid place-items-center mb-3
-                      bg-red-50 dark:bg-red-400/10">
-        <AlertCircle className="w-6 h-6 text-red-500 dark:text-red-400" />
-      </div>
-      <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">خطایی رخ داده</h3>
-      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 max-w-sm">{message}</p>
+    <div className="flex flex-col items-center justify-center py-16 text-center px-4">
+      <AlertCircle className="w-8 h-8 text-danger mb-3" strokeWidth={1.5} />
+      <h3 className="text-sm font-semibold text-text">خطایی رخ داده</h3>
+      <p className="text-sm text-text-secondary mt-1 max-w-sm">{message}</p>
       {onRetry && (
         <button onClick={onRetry} className="btn-secondary mt-4">
           تلاش مجدد
@@ -100,17 +177,15 @@ export function Pagination({ page, totalPages, total, pageSize, onPageChange }: 
   const to   = Math.min(page * pageSize, total)
 
   return (
-    <div className="flex items-center justify-between px-4 py-3 border-t border-black/[0.06] dark:border-white/[0.06]">
-      <p className="text-sm text-gray-500 dark:text-gray-400">
-        نمایش <span className="font-medium text-gray-700 dark:text-gray-300">{from}</span> تا <span className="font-medium text-gray-700 dark:text-gray-300">{to}</span> از <span className="font-medium text-gray-700 dark:text-gray-300">{total}</span>
+    <div className="flex items-center justify-between px-3 py-2.5 border-t border-border bg-surface">
+      <p className="text-xs text-text-secondary font-mono">
+        {from}–{to} از {total}
       </p>
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-0.5">
         <button
           onClick={() => onPageChange(page - 1)}
           disabled={page <= 1}
-          className="p-1.5 rounded-lg text-gray-500 hover:bg-black/[0.04] hover:text-gray-900
-                     disabled:opacity-40 disabled:cursor-not-allowed transition-colors
-                     dark:text-gray-400 dark:hover:bg-white/[0.06] dark:hover:text-gray-100"
+          className="p-1.5 rounded-lg hover:bg-surface2 disabled:opacity-30 disabled:cursor-not-allowed text-text-secondary"
         >
           <ChevronRight className="w-4 h-4" />
         </button>
@@ -122,10 +197,8 @@ export function Pagination({ page, totalPages, total, pageSize, onPageChange }: 
               key={p}
               onClick={() => onPageChange(p)}
               className={clsx(
-                'w-8 h-8 text-sm rounded-lg font-medium transition-all duration-150',
-                p === page
-                  ? 'bg-gradient-to-b from-brand-500 to-brand-600 text-white shadow-glow'
-                  : 'text-gray-600 hover:bg-black/[0.05] dark:text-gray-300 dark:hover:bg-white/[0.07]'
+                'w-7 h-7 text-xs rounded-lg font-medium font-mono',
+                p === page ? 'bg-accent-600 text-white' : 'hover:bg-surface2 text-text-secondary'
               )}
             >
               {p}
@@ -135,9 +208,7 @@ export function Pagination({ page, totalPages, total, pageSize, onPageChange }: 
         <button
           onClick={() => onPageChange(page + 1)}
           disabled={page >= totalPages}
-          className="p-1.5 rounded-lg text-gray-500 hover:bg-black/[0.04] hover:text-gray-900
-                     disabled:opacity-40 disabled:cursor-not-allowed transition-colors
-                     dark:text-gray-400 dark:hover:bg-white/[0.06] dark:hover:text-gray-100"
+          className="p-1.5 rounded-lg hover:bg-surface2 disabled:opacity-30 disabled:cursor-not-allowed text-text-secondary"
         >
           <ChevronLeft className="w-4 h-4" />
         </button>
@@ -153,27 +224,44 @@ export function Modal({ title, onClose, children }: {
   onClose: () => void
   children: React.ReactNode
 }) {
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prev
+    }
+  }, [onClose])
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" onClick={onClose} aria-hidden />
       <div
-        className="absolute inset-0 bg-space-950/40 backdrop-blur-sm animate-[fade-up_.2s_ease-out]"
-        onClick={onClose}
-      />
-      <div className="relative w-full max-w-md rounded-2xl p-6 enter-pop
-                       bg-white/90 backdrop-blur-2xl border border-black/[0.06] shadow-glass
-                       dark:bg-space-900/90 dark:border-white/10 dark:shadow-glass-dark">
-        <div className="flex items-start justify-between mb-4">
-          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">{title}</h2>
-          <button
-            onClick={onClose}
-            className="p-1 -m-1 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-black/[0.04]
-                       transition-colors dark:hover:text-gray-200 dark:hover:bg-white/[0.06]"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className="relative bg-surface text-text rounded-2xl shadow-popover border border-border w-full max-w-md p-6 enter-pop max-h-[90vh] overflow-y-auto"
+      >
+        <h2 className="text-base font-bold text-text mb-4">{title}</h2>
         {children}
       </div>
     </div>
+  )
+}
+
+// ── Avatar ────────────────────────────────────────────────────────────────────
+
+export function Avatar({ name, size = 32 }: { name?: string; size?: number }) {
+  const letter = (name ?? '?').trim().charAt(0).toUpperCase() || '?'
+  return (
+    <span
+      style={{ width: size, height: size, fontSize: size * 0.42 }}
+      className="inline-flex items-center justify-center rounded-full bg-gradient-to-br from-accent-400 to-accent-700 text-white font-bold shrink-0"
+      aria-hidden
+    >
+      {letter}
+    </span>
   )
 }

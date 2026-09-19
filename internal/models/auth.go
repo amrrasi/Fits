@@ -40,6 +40,7 @@ type SafeUser struct {
 	IsActive    bool       `json:"is_active"`
 	LastLoginAt *time.Time `json:"last_login_at,omitempty"`
 	CreatedAt   time.Time  `json:"created_at"`
+	Permissions []string   `json:"permissions,omitempty"`
 }
 
 func (u *User) ToSafe() SafeUser {
@@ -66,7 +67,7 @@ type Session struct {
 
 type TokenPair struct {
 	AccessToken  string    `json:"access_token"`
-	RefreshToken string    `json:"refresh_token"`
+	RefreshToken string    `json:"-"` // delivered only via httpOnly cookie
 	ExpiresAt    time.Time `json:"expires_at"`
 	User         SafeUser  `json:"user"`
 }

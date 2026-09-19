@@ -22,7 +22,33 @@ type ParseResult struct {
 	Metadata models.FITSMetadata
 }
 
-func ParseFile(path string) (*ParseResult, error) {
+const (
+	maxHeadersPerFile = 200_000
+	maxTextLen        = 4096
+)
+
+// clean makes header text safe for PostgreSQL (no NUL bytes, valid UTF-8, bounded length).
+func clean(s string) string {
+	s = strings.ReplaceAll(s, "\x00", "")
+	s = strings.ToValidUTF8(s, "?")
+	if len(s) > maxTextLen {
+		s = strings.ToValidUTF8(s[:maxTextLen], "")
+	}
+	return s
+}
+
+// ParseFile parses a FITS file. A malformed/hostile file can never crash the process:
+// panics from the underlying library are converted into errors.
+func ParseFile(path string) (res *ParseResult, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			res, err = nil, fmt.Errorf("فایل FITS معتبر نیست (خطای پردازش): %v", r)
+		}
+	}()
+	return parseFile(path)
+}
+
+func parseFile(path string) (*ParseResult, error) {
 	log := logger.S().With("file", path)
 	log.Debug("fits: opening file")
 
@@ -78,11 +104,12 @@ func ParseFile(path string) (*ParseResult, error) {
 		for k := range keys {
 			card := hdr.Card(k)
 			keyword := strings.TrimSpace(card.Name)
-			if keyword == "" || keyword == "COMMENT" || keyword == "HISTORY" {
-				// Still store them but skip metadata extraction
+			if len(result.Headers) >= maxHeadersPerFile {
+				return nil, fmt.Errorf("تعداد هدرهای فایل بیش از حد مجاز است (%d)", maxHeadersPerFile)
 			}
+			keyword = clean(keyword)
 
-			rawValue := fmt.Sprintf("%v", card.Value)
+			rawValue := clean(fmt.Sprintf("%v", card.Value))
 			valType := inferType(card.Value)
 
 			header := models.FITSHeader{
@@ -91,7 +118,7 @@ func ParseFile(path string) (*ParseResult, error) {
 				HDUName:   hduName,
 				Keyword:   keyword,
 				Value:     rawValue,
-				Comment:   card.Comment,
+				Comment:   clean(card.Comment),
 				ValueType: valType,
 			}
 			result.Headers = append(result.Headers, header)

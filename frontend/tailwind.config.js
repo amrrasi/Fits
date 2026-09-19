@@ -51,12 +51,12 @@ export default {
         xl:  ['1.125rem', { lineHeight: '1.6rem' }],
       },
       boxShadow: {
-        subtle: '0 1px 2px 0 rgb(0 0 0 / 0.04)',
+        subtle: '0 1px 3px 0 rgb(30 35 80 / 0.06), 0 1px 2px -1px rgb(30 35 80 / 0.05)',
         popover: '0 4px 20px -6px rgb(0 0 0 / 0.18), 0 2px 6px -2px rgb(0 0 0 / 0.08)',
       },
       keyframes: {
         'fade-up': {
-          '0%':   { opacity: 0, transform: 'translateY(4px)' },
+          '0%':   { opacity: 0, transform: 'translateY(6px)' },
           '100%': { opacity: 1, transform: 'translateY(0)' },
         },
       },

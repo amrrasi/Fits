@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -275,8 +276,12 @@ func (r *UserRepository) ListAuditLogs(ctx context.Context, f ListAuditFilter) (
 		return nil, 0, fmt.Errorf("repository: count audit logs: %w", err)
 	}
 
-	if f.Page < 1 { f.Page = 1 }
-	if f.PageSize < 1 { f.PageSize = 50 }
+	if f.Page < 1 {
+		f.Page = 1
+	}
+	if f.PageSize < 1 {
+		f.PageSize = 50
+	}
 	offset := (f.Page - 1) * f.PageSize
 
 	listArgs := append(args, f.PageSize, offset)
@@ -322,4 +327,117 @@ func (r *UserRepository) InsertAuditLog(ctx context.Context, userID *int64, acti
 		return fmt.Errorf("repository: insert audit log: %w", err)
 	}
 	return nil
+}
+
+// ── Security-hardening additions ──────────────────────────────────────────────
+
+// ErrLastAdmin is returned when an operation would leave the system without an active admin.
+var ErrLastAdmin = errors.New("حداقل یک مدیر فعال باید در سیستم باقی بماند")
+
+// ConsumeSession atomically deletes and returns a session (single-use refresh tokens).
+func (r *UserRepository) ConsumeSession(ctx context.Context, tokenHash string) (*models.Session, error) {
+	var s models.Session
+	err := r.pool.QueryRow(ctx, `
+		DELETE FROM sessions WHERE refresh_token = $1
+		RETURNING id, user_id, refresh_token, COALESCE(user_agent,''), COALESCE(ip_address,''), expires_at, created_at`,
+		tokenHash).Scan(&s.ID, &s.UserID, &s.RefreshToken, &s.UserAgent, &s.IPAddress, &s.ExpiresAt, &s.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("user_repo: consume session: %w", err)
+	}
+	return &s, nil
+}
+
+// TrimSessions keeps only the newest `keep` sessions of a user.
+func (r *UserRepository) TrimSessions(ctx context.Context, userID int64, keep int) error {
+	_, err := r.pool.Exec(ctx, `
+		DELETE FROM sessions WHERE user_id = $1 AND id NOT IN (
+			SELECT id FROM sessions WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2)`, userID, keep)
+	return err
+}
+
+// DeleteOtherSessions revokes every session of the user except the one with keepHash.
+func (r *UserRepository) DeleteOtherSessions(ctx context.Context, userID int64, keepHash string) error {
+	_, err := r.pool.Exec(ctx, `DELETE FROM sessions WHERE user_id = $1 AND refresh_token <> $2`, userID, keepHash)
+	return err
+}
+
+func (r *UserRepository) CountActiveAdmins(ctx context.Context) (int, error) {
+	var n int
+	err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM users WHERE role = 'admin' AND is_active`).Scan(&n)
+	return n, err
+}
+
+// guardLastAdmin runs inside tx: locks admin rows and fails if `id` is the last active admin
+// and the change (demotion / deactivation / deletion) would remove it.
+func guardLastAdmin(ctx context.Context, tx pgx.Tx, id int64, stillAdminActive bool) error {
+	var role string
+	var active bool
+	err := tx.QueryRow(ctx, `SELECT role::text, is_active FROM users WHERE id = $1 FOR UPDATE`, id).Scan(&role, &active)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if role != "admin" || !active || stillAdminActive {
+		return nil
+	}
+	rows, err := tx.Query(ctx, `SELECT id FROM users WHERE role = 'admin' AND is_active FOR UPDATE`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	others := 0
+	for rows.Next() {
+		var uid int64
+		if err := rows.Scan(&uid); err != nil {
+			return err
+		}
+		if uid != id {
+			others++
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if others == 0 {
+		return ErrLastAdmin
+	}
+	return nil
+}
+
+// UpdateUserGuarded updates name/role/active atomically with the last-admin guard.
+func (r *UserRepository) UpdateUserGuarded(ctx context.Context, id int64, fullName string, role models.Role, active bool) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	if err := guardLastAdmin(ctx, tx, id, role == models.RoleAdmin && active); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `UPDATE users SET full_name=$2, role=$3, is_active=$4, updated_at=NOW() WHERE id=$1`,
+		id, fullName, string(role), active); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+// DeleteUserGuarded deletes a user atomically with the last-admin guard.
+func (r *UserRepository) DeleteUserGuarded(ctx context.Context, id int64) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	if err := guardLastAdmin(ctx, tx, id, false); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM users WHERE id = $1`, id); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }

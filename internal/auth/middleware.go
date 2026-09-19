@@ -2,6 +2,8 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -13,24 +15,35 @@ type contextKey string
 
 const claimsKey contextKey = "claims"
 
-func Middleware(ts *TokenService) func(http.Handler) http.Handler {
+// Middleware validates the bearer token, then re-checks the user in the database
+// (via Guard) so deactivation / role changes apply immediately.
+func Middleware(ts *TokenService, guard *Guard) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tokenStr := extractBearer(r)
 			if tokenStr == "" {
-				writeUnauthorized(w, "missing authorization token")
+				writeUnauthorized(w, "ابتدا وارد حساب کاربری خود شوید.")
 				return
 			}
-
 			claims, err := ts.ValidateAccessToken(tokenStr)
 			if err != nil {
 				logger.S().Debugw("توکن احراز ناموفق بود", "err", err, "path", r.URL.Path)
-				writeUnauthorized(w, "توکن نامعتبر یا باطل شده است.")
+				writeUnauthorized(w, "توکن نامعتبر یا منقضی شده است.")
 				return
 			}
-
-			ctx := context.WithValue(r.Context(), claimsKey, claims)
-			next.ServeHTTP(w, r.WithContext(ctx))
+			st, err := guard.Check(r.Context(), claims.UserID)
+			if err != nil {
+				if errors.Is(err, ErrAccountInactive) {
+					writeUnauthorized(w, err.Error())
+					return
+				}
+				logger.S().Errorw("guard check failed", "err", err)
+				writeJSONError(w, http.StatusInternalServerError, "مشکلی در سرور پیش آمده است.")
+				return
+			}
+			claims.Email, claims.Role, claims.FullName = st.User.Email, st.User.Role, st.User.FullName
+			claims.Permissions = st.Perms
+			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), claimsKey, claims)))
 		})
 	}
 }
@@ -100,14 +113,14 @@ func extractBearer(r *http.Request) string {
 	return strings.TrimSpace(parts[1])
 }
 
-func writeUnauthorized(w http.ResponseWriter, msg string) {
+func writeJSONError(w http.ResponseWriter, status int, msg string) {
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusUnauthorized)
-	_, _ = w.Write([]byte(`{"error":"` + msg + `","code":401}`))
+	w.WriteHeader(status)
+	b, _ := json.Marshal(map[string]interface{}{"error": msg, "code": status})
+	_, _ = w.Write(b)
 }
 
-func writeForbidden(w http.ResponseWriter, msg string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusForbidden)
-	_, _ = w.Write([]byte(`{"error":"` + msg + `","code":403}`))
+func writeUnauthorized(w http.ResponseWriter, msg string) {
+	writeJSONError(w, http.StatusUnauthorized, msg)
 }
+func writeForbidden(w http.ResponseWriter, msg string) { writeJSONError(w, http.StatusForbidden, msg) }

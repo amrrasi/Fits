@@ -4,9 +4,12 @@ package userhandler
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/amrrasi/fits/internal/api"
+	"github.com/amrrasi/fits/internal/audit"
 	"github.com/amrrasi/fits/internal/auth"
 	"github.com/amrrasi/fits/internal/models"
 	"github.com/amrrasi/fits/internal/repository"
@@ -15,13 +18,38 @@ import (
 
 // Handler exposes user management endpoints.
 type Handler struct {
-	svc *userservice.Service
+	svc   *userservice.Service
+	audit *audit.Recorder
 }
 
 // New creates a Handler.
-func New(svc *userservice.Service) *Handler {
-	return &Handler{svc: svc}
+func New(svc *userservice.Service, rec *audit.Recorder) *Handler {
+	return &Handler{svc: svc, audit: rec}
 }
+
+// fail maps service errors to safe, user-facing responses (never leaks internals).
+func (h *Handler) fail(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, repository.ErrNotFound):
+		api.WriteNotFound(w, "مورد درخواستی پیدا نشد")
+	case errors.Is(err, userservice.ErrEmailTaken):
+		api.WriteConflict(w, err.Error())
+	case errors.Is(err, userservice.ErrLastAdmin):
+		api.WriteBadRequest(w, err.Error())
+	default:
+		api.WriteError(w, err)
+	}
+}
+
+func actor(r *http.Request) *int64 {
+	if c := auth.ClaimsFromContext(r.Context()); c != nil {
+		id := c.UserID
+		return &id
+	}
+	return nil
+}
+
+func idStr(id int64) string { return strconv.FormatInt(id, 10) }
 
 // RegisterRoutes wires all endpoints onto mux. authMW validates the bearer
 // token; each admin-area route is additionally gated by its own fine-grained
@@ -82,21 +110,23 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux, authMW func(http.Handler) h
 func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 	claims := auth.ClaimsFromContext(r.Context())
 	if claims == nil {
-		api.WriteUnauthorized(w, "not authenticated")
+		api.WriteUnauthorized(w, "ابتدا وارد حساب خود شوید")
 		return
 	}
 
 	user, err := h.svc.GetByID(r.Context(), claims.UserID)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
-			api.WriteNotFound(w, "user not found")
+			api.WriteNotFound(w, "کاربر پیدا نشد")
 			return
 		}
 		api.WriteInternalError(w, err)
 		return
 	}
 
-	api.WriteOK(w, user.ToSafe())
+	safe := user.ToSafe()
+	safe.Permissions = claims.Permissions
+	api.WriteOK(w, safe)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -108,34 +138,32 @@ type changePasswordRequest struct {
 	NewPassword string `json:"new_password"`
 }
 
-// ChangeMyPassword lets the logged-in user change their own password.
 func (h *Handler) ChangeMyPassword(w http.ResponseWriter, r *http.Request) {
 	claims := auth.ClaimsFromContext(r.Context())
 	if claims == nil {
-		api.WriteUnauthorized(w, "not authenticated")
+		api.WriteUnauthorized(w, "ابتدا وارد حساب خود شوید")
 		return
 	}
-
 	var req changePasswordRequest
 	if !api.DecodeJSON(w, r, &req) {
 		return
 	}
 	if req.OldPassword == "" || req.NewPassword == "" {
-		api.WriteBadRequest(w, "old_password and new_password are required")
+		api.WriteBadRequest(w, "رمز عبور فعلی و جدید را وارد کنید")
 		return
 	}
-
-	err := h.svc.ChangePassword(r.Context(), userservice.ChangePasswordInput{
-		UserID:      claims.UserID,
-		OldPassword: req.OldPassword,
-		NewPassword: req.NewPassword,
-	})
-	if err != nil {
-		api.WriteBadRequest(w, err.Error())
+	keep := ""
+	if c, err := r.Cookie(auth.CookieName()); err == nil {
+		keep = auth.HashRefreshToken(c.Value)
+	}
+	if err := h.svc.ChangePassword(r.Context(), userservice.ChangePasswordInput{
+		UserID: claims.UserID, OldPassword: req.OldPassword, NewPassword: req.NewPassword, KeepSession: keep,
+	}); err != nil {
+		h.fail(w, err)
 		return
 	}
-
-	api.WriteOK(w, map[string]string{"message": "password updated"})
+	h.audit.Log(r, actor(r), "password.change", "user", idStr(claims.UserID), nil, nil)
+	api.WriteOK(w, map[string]string{"message": "رمز عبور با موفقیت تغییر کرد؛ سایر دستگاه‌ها خارج شدند"})
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -193,40 +221,30 @@ type createUserRequest struct {
 	Role     models.Role `json:"role"`
 }
 
-// Create adds a new user account.
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var req createUserRequest
 	if !api.DecodeJSON(w, r, &req) {
 		return
 	}
-
 	req.Email = strings.TrimSpace(strings.ToLower(req.Email))
 	if req.Email == "" || req.Password == "" {
-		api.WriteBadRequest(w, "email and password are required")
+		api.WriteBadRequest(w, "ایمیل و رمز عبور را وارد کنید")
 		return
 	}
-
 	id, err := h.svc.Create(r.Context(), userservice.CreateInput{
-		Email:    req.Email,
-		Password: req.Password,
-		FullName: req.FullName,
-		Role:     req.Role,
+		Email: req.Email, Password: req.Password, FullName: req.FullName, Role: req.Role,
 	})
 	if err != nil {
-		if errors.Is(err, userservice.ErrEmailTaken) {
-			api.WriteConflict(w, err.Error())
-			return
-		}
-		api.WriteBadRequest(w, err.Error())
+		h.fail(w, err)
 		return
 	}
-
 	user, err := h.svc.GetByID(r.Context(), id)
 	if err != nil {
-		api.WriteInternalError(w, err)
+		h.fail(w, err)
 		return
 	}
-
+	h.audit.Log(r, actor(r), "user.create", "user", idStr(id), nil,
+		map[string]interface{}{"email": user.Email, "full_name": user.FullName, "role": user.Role})
 	api.WriteCreated(w, user.ToSafe())
 }
 
@@ -245,7 +263,7 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 	user, err := h.svc.GetByID(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
-			api.WriteNotFound(w, "user not found")
+			api.WriteNotFound(w, "کاربر پیدا نشد")
 			return
 		}
 		api.WriteInternalError(w, err)
@@ -262,44 +280,46 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 type updateUserRequest struct {
 	FullName string      `json:"full_name"`
 	Role     models.Role `json:"role"`
-	IsActive bool        `json:"is_active"`
+	IsActive *bool       `json:"is_active"`
 }
 
-// Update edits a user's full_name, role, and active status.
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	id, err := api.PathID(r, "id")
 	if err != nil {
 		api.WriteBadRequest(w, err.Error())
 		return
 	}
-
 	var req updateUserRequest
 	if !api.DecodeJSON(w, r, &req) {
 		return
 	}
-
-	if err := h.svc.Update(r.Context(), id, userservice.UpdateInput{
-		FullName: req.FullName,
-		Role:     req.Role,
-		IsActive: req.IsActive,
-	}); err != nil {
-		switch {
-		case errors.Is(err, repository.ErrNotFound):
-			api.WriteNotFound(w, "user not found")
-		case errors.Is(err, userservice.ErrLastAdmin):
-			api.WriteBadRequest(w, err.Error())
-		default:
-			api.WriteBadRequest(w, err.Error())
-		}
+	if req.IsActive == nil {
+		api.WriteBadRequest(w, "وضعیت فعال بودن حساب باید مشخص شود")
 		return
 	}
-
+	old, err := h.svc.GetByID(r.Context(), id)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	var actorID int64
+	if a := actor(r); a != nil {
+		actorID = *a
+	}
+	if err := h.svc.Update(r.Context(), id, actorID, userservice.UpdateInput{
+		FullName: req.FullName, Role: req.Role, IsActive: *req.IsActive,
+	}); err != nil {
+		h.fail(w, err)
+		return
+	}
 	user, err := h.svc.GetByID(r.Context(), id)
 	if err != nil {
-		api.WriteInternalError(w, err)
+		h.fail(w, err)
 		return
 	}
-
+	h.audit.Log(r, actor(r), "user.update", "user", idStr(id),
+		map[string]interface{}{"full_name": old.FullName, "role": old.Role, "is_active": old.IsActive},
+		map[string]interface{}{"full_name": user.FullName, "role": user.Role, "is_active": user.IsActive})
 	api.WriteOK(w, user.ToSafe())
 }
 
@@ -307,33 +327,27 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 // DELETE /api/users/{id}   (admin)
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Delete permanently removes a user account.
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	id, err := api.PathID(r, "id")
 	if err != nil {
 		api.WriteBadRequest(w, err.Error())
 		return
 	}
-
-	// Prevent self-deletion
-	claims := auth.ClaimsFromContext(r.Context())
-	if claims != nil && claims.UserID == id {
-		api.WriteBadRequest(w, "you cannot delete your own account")
+	if a := actor(r); a != nil && *a == id {
+		api.WriteBadRequest(w, "نمی‌توانید حساب خودتان را حذف کنید")
 		return
 	}
-
+	old, err := h.svc.GetByID(r.Context(), id)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
 	if err := h.svc.Delete(r.Context(), id); err != nil {
-		switch {
-		case errors.Is(err, repository.ErrNotFound):
-			api.WriteNotFound(w, "user not found")
-		case errors.Is(err, userservice.ErrLastAdmin):
-			api.WriteBadRequest(w, err.Error())
-		default:
-			api.WriteInternalError(w, err)
-		}
+		h.fail(w, err)
 		return
 	}
-
+	h.audit.Log(r, actor(r), "user.delete", "user", idStr(id),
+		map[string]interface{}{"email": old.Email, "full_name": old.FullName, "role": old.Role}, nil)
 	api.WriteNoContent(w)
 }
 
@@ -345,49 +359,60 @@ type adminResetPasswordRequest struct {
 	NewPassword string `json:"new_password"`
 }
 
-// AdminResetPassword lets an admin set a new password for any user.
 func (h *Handler) AdminResetPassword(w http.ResponseWriter, r *http.Request) {
 	id, err := api.PathID(r, "id")
 	if err != nil {
 		api.WriteBadRequest(w, err.Error())
 		return
 	}
-
 	var req adminResetPasswordRequest
 	if !api.DecodeJSON(w, r, &req) {
 		return
 	}
 	if req.NewPassword == "" {
-		api.WriteBadRequest(w, "new_password is required")
+		api.WriteBadRequest(w, "رمز عبور جدید را وارد کنید")
 		return
 	}
-
 	if err := h.svc.AdminResetPassword(r.Context(), id, req.NewPassword); err != nil {
-		api.WriteBadRequest(w, err.Error())
+		h.fail(w, err)
 		return
 	}
-
-	api.WriteOK(w, map[string]string{"message": "password reset"})
+	h.audit.Log(r, actor(r), "password.reset", "user", idStr(id), nil, nil)
+	api.WriteOK(w, map[string]string{"message": "رمز عبور کاربر بازنشانی شد و همه‌ی نشست‌های او بسته شد"})
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/audit-logs   (admin only)
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ListAuditLogs returns paginated audit log entries with optional filters.
-// Query params: page, page_size, action, entity_type, date_from, date_to
+func parseDate(v string) (string, bool) {
+	if v == "" {
+		return "", true
+	}
+	for _, layout := range []string{"2006-01-02", time.RFC3339} {
+		if t, err := time.Parse(layout, v); err == nil {
+			return t.Format(time.RFC3339), true
+		}
+	}
+	return "", false
+}
+
 func (h *Handler) ListAuditLogs(w http.ResponseWriter, r *http.Request) {
 	page, pageSize, _ := api.Pagination(r)
-
+	from, ok1 := parseDate(api.QueryString(r, "date_from", ""))
+	to, ok2 := parseDate(api.QueryString(r, "date_to", ""))
+	if !ok1 || !ok2 {
+		api.WriteBadRequest(w, "فرمت تاریخ نامعتبر است")
+		return
+	}
 	f := repository.ListAuditFilter{
 		Action:     api.QueryString(r, "action", ""),
 		EntityType: api.QueryString(r, "entity_type", ""),
-		DateFrom:   api.QueryString(r, "date_from", ""),
-		DateTo:     api.QueryString(r, "date_to", ""),
+		DateFrom:   from,
+		DateTo:     to,
 		Page:       page,
 		PageSize:   pageSize,
 	}
-
 	logs, total, err := h.svc.ListAuditLogs(r.Context(), f)
 	if err != nil {
 		api.WriteInternalError(w, err)
@@ -425,8 +450,6 @@ type assignRoleRequest struct {
 	RoleID int64 `json:"role_id"`
 }
 
-// AssignUserRole grants an additional role to a user, on top of whatever
-// they already have (including their primary built-in role).
 func (h *Handler) AssignUserRole(w http.ResponseWriter, r *http.Request) {
 	userID, err := api.PathID(r, "id")
 	if err != nil {
@@ -438,24 +461,21 @@ func (h *Handler) AssignUserRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.RoleID < 1 {
-		api.WriteBadRequest(w, "role_id الزامی است")
+		api.WriteBadRequest(w, "شناسه‌ی نقش الزامی است")
 		return
 	}
-
-	claims := auth.ClaimsFromContext(r.Context())
-	var assignedBy int64
-	if claims != nil {
-		assignedBy = claims.UserID
+	var by int64
+	if a := actor(r); a != nil {
+		by = *a
 	}
-
-	if err := h.svc.AssignUserRole(r.Context(), userID, req.RoleID, assignedBy); err != nil {
-		api.WriteInternalError(w, err)
+	if err := h.svc.AssignUserRole(r.Context(), userID, req.RoleID, by); err != nil {
+		h.fail(w, err)
 		return
 	}
+	h.audit.Log(r, actor(r), "user.role_assign", "user", idStr(userID), nil, map[string]interface{}{"role_id": req.RoleID})
 	api.WriteOK(w, map[string]string{"message": "نقش اختصاص داده شد"})
 }
 
-// RemoveUserRole revokes a role from a user.
 func (h *Handler) RemoveUserRole(w http.ResponseWriter, r *http.Request) {
 	userID, err := api.PathID(r, "id")
 	if err != nil {
@@ -468,9 +488,10 @@ func (h *Handler) RemoveUserRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.RemoveUserRole(r.Context(), userID, roleID); err != nil {
-		api.WriteInternalError(w, err)
+		h.fail(w, err)
 		return
 	}
+	h.audit.Log(r, actor(r), "user.role_remove", "user", idStr(userID), map[string]interface{}{"role_id": roleID}, nil)
 	api.WriteNoContent(w)
 }
 
@@ -505,7 +526,6 @@ type createRoleRequest struct {
 	Description string `json:"description"`
 }
 
-// CreateRole creates a new custom role (beyond admin/editor/viewer).
 func (h *Handler) CreateRole(w http.ResponseWriter, r *http.Request) {
 	var req createRoleRequest
 	if !api.DecodeJSON(w, r, &req) {
@@ -513,13 +533,13 @@ func (h *Handler) CreateRole(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := h.svc.CreateRole(r.Context(), req.Name, req.Description)
 	if err != nil {
-		api.WriteBadRequest(w, err.Error())
+		h.fail(w, err)
 		return
 	}
-	api.WriteCreated(w, map[string]interface{}{"id": id, "name": req.Name})
+	h.audit.Log(r, actor(r), "role.create", "role", idStr(id), nil, map[string]interface{}{"name": req.Name})
+	api.WriteCreated(w, map[string]interface{}{"id": id, "name": strings.ToLower(strings.TrimSpace(req.Name))})
 }
 
-// DeleteRole removes a custom role. Built-in roles cannot be deleted.
 func (h *Handler) DeleteRole(w http.ResponseWriter, r *http.Request) {
 	id, err := api.PathID(r, "id")
 	if err != nil {
@@ -531,9 +551,10 @@ func (h *Handler) DeleteRole(w http.ResponseWriter, r *http.Request) {
 			api.WriteNotFound(w, "نقش یافت نشد (یا نقشی پیش‌فرض است و قابل حذف نیست)")
 			return
 		}
-		api.WriteInternalError(w, err)
+		h.fail(w, err)
 		return
 	}
+	h.audit.Log(r, actor(r), "role.delete", "role", idStr(id), nil, nil)
 	api.WriteNoContent(w)
 }
 
@@ -553,8 +574,9 @@ func (h *Handler) SetRolePermissions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.SetRolePermissions(r.Context(), roleID, req.Permissions); err != nil {
-		api.WriteInternalError(w, err)
+		h.fail(w, err)
 		return
 	}
+	h.audit.Log(r, actor(r), "role.permissions", "role", idStr(roleID), nil, map[string]interface{}{"permissions": req.Permissions})
 	api.WriteOK(w, map[string]string{"message": "دسترسی‌های نقش به‌روزرسانی شد"})
 }

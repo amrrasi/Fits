@@ -11,11 +11,10 @@ export const authApi = {
   login: (email: string, password: string) =>
     api.post<TokenPair>('/auth/login', { email, password }).then((r) => r.data),
 
-  logout: (refreshToken: string) =>
-    api.post('/auth/logout', { refresh_token: refreshToken }),
-
-  refresh: (refreshToken: string) =>
-    api.post<TokenPair>('/auth/refresh', { refresh_token: refreshToken }).then((r) => r.data),
+  // The refresh token lives in an httpOnly cookie — JS never sees it.
+  logout: () => api.post('/auth/logout'),
+  logoutAll: () => api.post('/auth/logout-all'),
+  refresh: () => api.post<TokenPair>('/auth/refresh').then((r) => r.data),
 }
 
 // ── Users ─────────────────────────────────────────────────────────────────────
