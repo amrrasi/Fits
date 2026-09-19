@@ -54,7 +54,7 @@ func (p *Processor) RunWithJob(ctx context.Context, existingJobID int64) error {
 	if existingJobID > 0 {
 		job, err := p.jobs.GetByID(ctx, existingJobID)
 		if err != nil {
-			return fmt.Errorf("پردازشگر: load job %d: %w", existingJobID, err)
+			return fmt.Errorf("پردازشگر: بارگذاری جاب %d: %w", existingJobID, err)
 		}
 		jobID = job.ID
 		scanTarget = job.ScanDir
@@ -62,7 +62,7 @@ func (p *Processor) RunWithJob(ctx context.Context, existingJobID int64) error {
 		scanTarget = p.cfg.ScanDir
 		id, err := p.jobs.Create(ctx, scanTarget)
 		if err != nil {
-			return fmt.Errorf("پردازشگر: create job: %w", err)
+			return fmt.Errorf("پردازشگر: ساخت جاب: %w", err)
 		}
 		jobID = id
 	}
@@ -75,15 +75,15 @@ func (p *Processor) RunWithJob(ctx context.Context, existingJobID int64) error {
 	if err != nil {
 		msg := err.Error()
 		_ = p.jobs.Finish(ctx, jobID, models.JobStatusFailed, 0, &msg)
-		return fmt.Errorf("پردازشگر: scan: %w", err)
+		return fmt.Errorf("پردازشگر: اسکن: %w", err)
 	}
 	if len(paths) == 0 {
-		log.Warn("پردازشگر: no FITS files found")
+		log.Warn("پردازشگر: فایل فیتسی یافت نشد")
 		_ = p.jobs.Finish(ctx, jobID, models.JobStatusCompleted, time.Since(start).Milliseconds(), nil)
 		return nil
 	}
 
-	log.Infow("پردازشگر: files discovered", "count", len(paths))
+	log.Infow("پردازشگر: فایل‌های یافت‌شده", "تعداد", len(paths))
 	_ = p.jobs.UpdateProgress(ctx, jobID, len(paths), 0, 0, 0)
 
 	pathCh := make(chan string, len(paths))
@@ -117,7 +117,7 @@ func (p *Processor) RunWithJob(ctx context.Context, existingJobID int64) error {
 				switch {
 				case procErr != nil:
 					atomic.AddInt64(&errorAtomic, 1)
-					wlog.Errorw("پردازشگر: file failed", "path", path, "err", procErr)
+					wlog.Errorw("پردازشگر: ناموفق", "path", path, "err", procErr)
 				case status == fileStatusDuplicate:
 					atomic.AddInt64(&dupAtomic, 1)
 				default:
@@ -154,7 +154,7 @@ func (p *Processor) RunWithJob(ctx context.Context, existingJobID int64) error {
 
 	_ = p.jobs.Finish(ctx, jobID, finalStatus, durationMs, nil)
 
-	log.Infow("پردازشگر: done",
+	log.Infow("پردازشگر: انجام شد ",
 		"total", len(paths),
 		"done", done,
 		"duplicates", dupCount,
@@ -271,7 +271,7 @@ func (p *Processor) processFile(ctx context.Context, jobID int64, path string) (
 	if err := tx.Commit(ctx); err != nil {
 		return "", fmt.Errorf("پردازشگر: commit tx: %w", err)
 	}
-	tx = nil // prevent deferred rollback
+	tx = nil
 
 	log.Infow("پردازشگر: file done",
 		"file_id", fileID,
