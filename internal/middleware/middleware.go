@@ -23,7 +23,6 @@ const requestIDKey contextKey = "request_id"
 
 var requestIDRe = regexp.MustCompile(`^[A-Za-z0-9._-]{8,64}$`)
 
-// RequestID attaches a request id (a client-supplied one is accepted only if it looks sane).
 func RequestID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := r.Header.Get("X-Request-ID")
@@ -42,7 +41,6 @@ func GetRequestID(ctx context.Context) string {
 	return ""
 }
 
-// Recoverer turns handler panics into a clean 500 instead of a dropped connection.
 func Recoverer(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
@@ -60,14 +58,11 @@ func Recoverer(next http.Handler) http.Handler {
 	})
 }
 
-// ── Client IP / trusted proxies ───────────────────────────────────────────────
-
 var (
 	trustMu sync.RWMutex
 	trusted []*net.IPNet
 )
 
-// SetTrustedProxies configures which peers may set X-Forwarded-For (CIDRs or single IPs).
 func SetTrustedProxies(cidrs []string) error {
 	var nets []*net.IPNet
 	for _, c := range cidrs {
@@ -105,8 +100,6 @@ func isTrusted(ip net.IP) bool {
 	return false
 }
 
-// ClientIP returns the real client address. X-Forwarded-For is honoured only when the
-// direct peer is a configured trusted proxy, and is walked right-to-left.
 func ClientIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
@@ -140,8 +133,6 @@ func isHTTPS(r *http.Request) bool {
 	return false
 }
 
-// ── Security headers ──────────────────────────────────────────────────────────
-
 const csp = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; " +
 	"font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
 
@@ -165,8 +156,6 @@ func SecurityHeaders(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
-
-// ── CORS ──────────────────────────────────────────────────────────────────────
 
 type CORSConfig struct{ AllowedOrigins []string }
 
@@ -209,8 +198,6 @@ func CORS(cfg CORSConfig) func(http.Handler) http.Handler {
 		})
 	}
 }
-
-// ── Rate limiting ─────────────────────────────────────────────────────────────
 
 type bucket struct {
 	tokens float64
@@ -284,7 +271,6 @@ func tooMany(w http.ResponseWriter) {
 	_, _ = w.Write([]byte(`{"error":"تعداد درخواست‌ها بیش از حد مجاز است؛ کمی صبر کنید","code":429}`))
 }
 
-// Limit applies one limiter to everything.
 func (rl *RateLimiter) Limit(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !rl.allow(ClientIP(r)) {
@@ -295,7 +281,6 @@ func (rl *RateLimiter) Limit(next http.Handler) http.Handler {
 	})
 }
 
-// SplitLimit uses a stricter limiter for /api/auth/* and a general one for the rest.
 func SplitLimit(auth, api *RateLimiter) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -347,7 +332,6 @@ func Logger(next http.Handler) http.Handler {
 	})
 }
 
-// JSONError writes a small JSON error (used by other packages' middleware).
 func JSONError(w http.ResponseWriter, status int, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
