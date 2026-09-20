@@ -11,6 +11,7 @@ type attempt struct {
 	blocked time.Time
 }
 
+// LoginThrottle counts failed logins per (email+ip), per email and per ip (in memory).
 type LoginThrottle struct {
 	mu     sync.Mutex
 	m      map[string]*attempt
@@ -29,7 +30,7 @@ func limits(key string) int {
 	case len(key) > 3 && key[:3] == "ip:":
 		return 30
 	default:
-		return 40
+		return 40 // per-email across all IPs (high, so an attacker cannot easily lock a victim out)
 	}
 }
 
@@ -37,6 +38,7 @@ func keysFor(email, ip string) []string {
 	return []string{"acc:" + email + "|" + ip, "ip:" + ip, "em:" + email}
 }
 
+// Blocked reports whether any key is currently blocked and for how long.
 func (t *LoginThrottle) Blocked(email, ip string) (time.Duration, bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()

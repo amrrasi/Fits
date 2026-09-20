@@ -32,7 +32,7 @@ func (r *UserRepository) ListUsers(ctx context.Context, f ListUsersFilter) (*Lis
 
 	if f.Search != "" {
 		where = append(where, fmt.Sprintf("(email ILIKE $%d OR full_name ILIKE $%d)", idx, idx+1))
-		pattern := "%" + f.Search + "%"
+		pattern := "%" + escapeLike(f.Search) + "%"
 		args = append(args, pattern, pattern)
 		idx += 2
 	}

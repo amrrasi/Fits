@@ -3,9 +3,11 @@ package auth
 import (
 	"encoding/json"
 	"errors"
+	"github.com/google/uuid"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/amrrasi/fits/internal/api"
 	"github.com/amrrasi/fits/internal/audit"
@@ -33,6 +35,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux, authMW func(http.Handler) h
 	mux.HandleFunc("POST /api/auth/logout", h.Logout)
 	mux.HandleFunc("POST /api/auth/refresh", h.Refresh)
 	mux.Handle("POST /api/auth/logout-all", authMW(http.HandlerFunc(h.LogoutAll)))
+	mux.Handle("GET /api/auth/sessions", authMW(http.HandlerFunc(h.ListSessions)))
+	mux.Handle("DELETE /api/auth/sessions/{id}", authMW(http.HandlerFunc(h.RevokeSession)))
 }
 
 // csrfOK: the refresh cookie is SameSite=Strict AND state-changing auth calls must carry a
@@ -150,3 +154,56 @@ func (h *Handler) LogoutAll(w http.ResponseWriter, r *http.Request) {
 
 // CookieName exposes the refresh cookie name to other packages (password change keeps this session).
 func CookieName() string { return refreshCookie }
+
+type sessionInfo struct {
+	ID        string    `json:"id"`
+	UserAgent string    `json:"user_agent"`
+	IPAddress string    `json:"ip_address"`
+	CreatedAt time.Time `json:"created_at"`
+	ExpiresAt time.Time `json:"expires_at"`
+	Current   bool      `json:"current"`
+}
+
+// ListSessions shows the caller's own active sessions (devices).
+func (h *Handler) ListSessions(w http.ResponseWriter, r *http.Request) {
+	claims := ClaimsFromContext(r.Context())
+	rows, err := h.svc.users.ListSessions(r.Context(), claims.UserID)
+	if err != nil {
+		api.WriteInternalError(w, err)
+		return
+	}
+	cur := ""
+	if c, err := r.Cookie(refreshCookie); err == nil {
+		cur = HashRefreshToken(c.Value)
+	}
+	out := make([]sessionInfo, 0, len(rows))
+	for _, s := range rows {
+		out = append(out, sessionInfo{ID: s.ID, UserAgent: s.UserAgent, IPAddress: s.IPAddress,
+			CreatedAt: s.CreatedAt, ExpiresAt: s.ExpiresAt, Current: cur != "" && s.TokenHash == cur})
+	}
+	api.WriteOK(w, out)
+}
+
+// RevokeSession signs out one of the caller's own devices.
+func (h *Handler) RevokeSession(w http.ResponseWriter, r *http.Request) {
+	if !csrfOK(w, r) {
+		return
+	}
+	claims := ClaimsFromContext(r.Context())
+	id := r.PathValue("id")
+	if _, err := uuid.Parse(id); err != nil {
+		api.WriteBadRequest(w, "شناسه‌ی نشست نامعتبر است")
+		return
+	}
+	ok, err := h.svc.users.DeleteSessionByID(r.Context(), claims.UserID, id)
+	if err != nil {
+		api.WriteInternalError(w, err)
+		return
+	}
+	if !ok {
+		api.WriteNotFound(w, "نشست پیدا نشد")
+		return
+	}
+	h.audit.Log(r, &claims.UserID, "session.revoke", "user", strconv.FormatInt(claims.UserID, 10), nil, nil)
+	api.WriteNoContent(w)
+}

@@ -27,6 +27,7 @@ const (
 	maxTextLen        = 4096
 )
 
+// clean makes header text safe for PostgreSQL (no NUL bytes, valid UTF-8, bounded length).
 func clean(s string) string {
 	s = strings.ReplaceAll(s, "\x00", "")
 	s = strings.ToValidUTF8(s, "?")
@@ -36,6 +37,8 @@ func clean(s string) string {
 	return s
 }
 
+// ParseFile parses a FITS file. A malformed/hostile file can never crash the process:
+// panics from the underlying library are converted into errors.
 func ParseFile(path string) (res *ParseResult, err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -49,6 +52,7 @@ func parseFile(path string) (*ParseResult, error) {
 	log := logger.S().With("file", path)
 	log.Debug("fits: opening file")
 
+	// ── File metadata ──────────────────────────────────────────────────────────
 	info, err := os.Stat(path)
 	if err != nil {
 		return nil, fmt.Errorf("fits: stat %q: %w", path, err)
@@ -59,6 +63,8 @@ func parseFile(path string) (*ParseResult, error) {
 		return nil, fmt.Errorf("fits: checksum %q: %w", path, err)
 	}
 
+	// ── Open FITS ──────────────────────────────────────────────────────────────
+	// fitsio.Open requires an io.Reader, not a path — open the OS file first.
 	osFile, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("fits: open %q: %w", path, err)
@@ -86,8 +92,9 @@ func parseFile(path string) (*ParseResult, error) {
 		HDUCount: len(hdus),
 		Status:   models.FileStatusProcessing,
 	}
-	result.Metadata.FileID = 0
+	result.Metadata.FileID = 0 // will be filled in after DB insert
 
+	// ── Process each HDU ──────────────────────────────────────────────────────
 	for hduIdx, hdu := range hdus {
 		hduName := hduName(hdu, hduIdx)
 		log.Debugw("fits: processing HDU", "index", hduIdx, "name", hduName)
@@ -106,6 +113,7 @@ func parseFile(path string) (*ParseResult, error) {
 			valType := inferType(card.Value)
 
 			header := models.FITSHeader{
+				// FileID filled in by repository after file insert
 				HDUIndex:  hduIdx,
 				HDUName:   hduName,
 				Keyword:   keyword,
@@ -115,6 +123,7 @@ func parseFile(path string) (*ParseResult, error) {
 			}
 			result.Headers = append(result.Headers, header)
 
+			// Extract well-known keywords into typed metadata (primary HDU only)
 			if hduIdx == 0 {
 				populateMetadata(&result.Metadata, keyword, card.Value)
 			}
@@ -128,10 +137,13 @@ func parseFile(path string) (*ParseResult, error) {
 	return result, nil
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
 func hduName(hdu fitsio.HDU, idx int) string {
 	if idx == 0 {
 		return "PRIMARY"
 	}
+	// Try EXTNAME keyword
 	hdr := hdu.Header()
 	keys := hdr.Keys()
 	for k := range keys {
@@ -145,6 +157,7 @@ func hduName(hdu fitsio.HDU, idx int) string {
 	return fmt.Sprintf("HDU%d", idx)
 }
 
+// sha256File computes a hex-encoded SHA-256 checksum of the file at path.
 func sha256File(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -159,6 +172,7 @@ func sha256File(path string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
+// inferType returns a string label for the Go type of a FITS card value.
 func inferType(v interface{}) string {
 	if v == nil {
 		return "undefined"
@@ -179,10 +193,13 @@ func inferType(v interface{}) string {
 	}
 }
 
+// populateMetadata extracts a known keyword value into the FITSMetadata struct.
+// Add new keywords here as the schema grows — no other file needs changing.
 func populateMetadata(m *models.FITSMetadata, keyword string, value interface{}) {
 	kw := strings.ToUpper(strings.TrimSpace(keyword))
 
 	switch kw {
+	// Image geometry
 	case "NAXIS":
 		if v := toInt(value); v != nil {
 			m.NAXIS = v
@@ -371,6 +388,8 @@ func populateMetadata(m *models.FITSMetadata, keyword string, value interface{})
 		}
 	}
 }
+
+// ── Type coercion helpers ─────────────────────────────────────────────────────
 
 func toFloat(v interface{}) *float64 {
 	switch val := v.(type) {

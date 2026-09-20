@@ -41,6 +41,9 @@ type SafeUser struct {
 	LastLoginAt *time.Time `json:"last_login_at,omitempty"`
 	CreatedAt   time.Time  `json:"created_at"`
 	Permissions []string   `json:"permissions,omitempty"`
+
+	// MustChangePassword is true when the user must pick a new password before doing anything else.
+	MustChangePassword bool `json:"must_change_password"`
 }
 
 func (u *User) ToSafe() SafeUser {
@@ -58,7 +61,7 @@ func (u *User) ToSafe() SafeUser {
 type Session struct {
 	ID           string    `db:"id"`
 	UserID       int64     `db:"user_id"`
-	RefreshToken string    `db:"refresh_token"`
+	RefreshToken string    `db:"refresh_token"` // stored as SHA-256 hash
 	UserAgent    string    `db:"user_agent"`
 	IPAddress    string    `db:"ip_address"`
 	ExpiresAt    time.Time `db:"expires_at"`
@@ -67,7 +70,7 @@ type Session struct {
 
 type TokenPair struct {
 	AccessToken  string    `json:"access_token"`
-	RefreshToken string    `json:"-"`
+	RefreshToken string    `json:"-"` // delivered only via httpOnly cookie
 	ExpiresAt    time.Time `json:"expires_at"`
 	User         SafeUser  `json:"user"`
 }

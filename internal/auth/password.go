@@ -13,7 +13,7 @@ import (
 const (
 	bcryptCost     = 12
 	MinPasswordLen = 10
-	maxPasswordLen = 72
+	maxPasswordLen = 72 // bcrypt silently ignores anything beyond 72 bytes
 )
 
 var commonPasswords = map[string]bool{
@@ -22,6 +22,7 @@ var commonPasswords = map[string]bool{
 	"1q2w3e4r5t": true, "abcd123456": true, "0123456789": true, "welcome123": true, "changeme123": true,
 }
 
+// ValidatePassword enforces the password policy. email may be empty.
 func ValidatePassword(pw, email string) error {
 	if len(pw) < MinPasswordLen {
 		return api.Invalid(fmt.Sprintf("رمز عبور باید حداقل %d کاراکتر باشد", MinPasswordLen))
@@ -83,6 +84,7 @@ var (
 	dummyHash string
 )
 
+// burnPasswordCheck spends the same CPU as a real check (timing equalisation for unknown users).
 func burnPasswordCheck(plain string) {
 	dummyOnce.Do(func() {
 		b, _ := bcrypt.GenerateFromPassword([]byte("dummy-password-for-timing"), bcryptCost)

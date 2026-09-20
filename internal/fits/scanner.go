@@ -9,6 +9,8 @@ import (
 	"github.com/amrrasi/fits/internal/logger"
 )
 
+// ScanDir walks root recursively and returns paths of all FITS files found.
+// Recognised extensions: .fits, .fit, .fts (case-insensitive).
 func ScanDir(root string) ([]string, error) {
 	log := logger.S().With("root", root)
 
@@ -21,12 +23,14 @@ func ScanDir(root string) ([]string, error) {
 	var paths []string
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
+			// Log but continue — don't abort the whole scan for one bad entry
 			log.Warnw("fits: scan walk error", "path", path, "err", err)
 			return nil
 		}
 		if d.IsDir() {
 			return nil
 		}
+		// symlinks/devices/etc. are skipped: a link inside the scan dir must not read files outside it
 		if !d.Type().IsRegular() {
 			return nil
 		}
@@ -53,6 +57,7 @@ func isFITSFile(path string) bool {
 	return false
 }
 
+// ScanError is returned when the scan directory cannot be walked.
 type ScanError struct {
 	Dir   string
 	Cause error
@@ -64,6 +69,8 @@ func (e *ScanError) Error() string {
 
 func (e *ScanError) Unwrap() error { return e.Cause }
 
+// ResolveScanDir validates a requested scan directory: it must resolve (after symlinks) to an
+// existing directory INSIDE root. An empty request means root itself.
 func ResolveScanDir(root, requested string) (string, error) {
 	realRoot, err := filepath.EvalSymlinks(root)
 	if err != nil {

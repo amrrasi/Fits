@@ -6,10 +6,12 @@ import type { Role } from '../../types'
 
 interface Props {
   requiredRole?: Role
+  /** permission code, e.g. "users.view" — works for custom roles too */
+  permission?: string
 }
 
-export default function ProtectedRoute({ requiredRole }: Props) {
-  const { isAuthenticated, user, ready } = useAuth()
+export default function ProtectedRoute({ requiredRole, permission }: Props) {
+  const { isAuthenticated, user, ready, can } = useAuth()
   const location = useLocation()
 
   if (!ready) {
@@ -18,14 +20,19 @@ export default function ProtectedRoute({ requiredRole }: Props) {
   if (!isAuthenticated) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />
   }
-  if (requiredRole && user?.role !== requiredRole) {
+  // A temporary password must be replaced before anything else is usable.
+  if (user?.must_change_password && location.pathname !== '/profile') {
+    return <Navigate to="/profile" replace />
+  }
+  const denied = (requiredRole && user?.role !== requiredRole) || (permission && !can(permission))
+  if (denied) {
     return (
       <div className="flex items-center justify-center h-64 enter">
         <div className="text-center max-w-xs">
           <div className="mx-auto mb-3 w-12 h-12 rounded-2xl bg-accent-100 text-accent-600 flex items-center justify-center">
             <Lock className="w-6 h-6" />
           </div>
-          <h2 className="text-lg font-bold text-text">این بخش مخصوص مدیران سامانه است</h2>
+          <h2 className="text-lg font-bold text-text">به این بخش دسترسی ندارید</h2>
           <p className="text-text-secondary mt-1 text-sm">برای دسترسی به این صفحه با مدیر سیستم هماهنگ کنید.</p>
         </div>
       </div>

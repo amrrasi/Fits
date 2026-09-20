@@ -13,7 +13,7 @@ import { formatDate } from '../../utils/format'
 import type { SafeUser } from '../../types'
 
 export default function UsersPage() {
-  const { user: me } = useAuth()
+  const { user: me, can } = useAuth()
   const toast = useToast()
   const qc = useQueryClient()
 
@@ -57,10 +57,12 @@ export default function UsersPage() {
             {isLoading ? '...' : `${data?.total ?? 0} کاربر`}
           </p>
         </div>
-        <button onClick={() => setShowCreate(true)} className="btn-primary">
-          <UserPlus className="w-4 h-4" />
-          کاربر جدید
-        </button>
+        {can('users.create') && (
+          <button onClick={() => setShowCreate(true)} className="btn-primary">
+            <UserPlus className="w-4 h-4" />
+            کاربر جدید
+          </button>
+        )}
       </div>
 
       {/* Filters */}
@@ -150,6 +152,7 @@ export default function UsersPage() {
                           >
                             <Eye className="w-3.5 h-3.5" />
                           </Link>
+                          {can('users.edit') && (
                           <button
                             onClick={() => setEditUser(u)}
                             className="btn-ghost p-1.5 text-text-muted hover:text-info"
@@ -157,6 +160,8 @@ export default function UsersPage() {
                           >
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
+                          )}
+                          {can('users.reset_password') && (
                           <button
                             onClick={() => setResetUser(u)}
                             className="btn-ghost p-1.5 text-text-muted hover:text-warning"
@@ -164,7 +169,8 @@ export default function UsersPage() {
                           >
                             <KeyRound className="w-3.5 h-3.5" />
                           </button>
-                          {u.id !== me?.id && (
+                          )}
+                          {can('users.delete') && u.id !== me?.id && (
                             <button
                               onClick={() => setDeleteUser(u)}
                               className="btn-ghost p-1.5 text-text-muted hover:text-danger hover:bg-danger-bg"

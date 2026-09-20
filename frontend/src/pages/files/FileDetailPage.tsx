@@ -16,7 +16,7 @@ type Tab = 'metadata' | 'headers' | 'history'
 export default function FileDetailPage() {
   const { id } = useParams<{ id: string }>()
   const fileId = Number(id)
-  const { isEditor } = useAuth()
+  const { can } = useAuth()
   const qc = useQueryClient()
 
   const [tab, setTab]             = useState<Tab>('metadata')
@@ -95,7 +95,7 @@ export default function FileDetailPage() {
           ) : (
             <MetadataTable
               meta={metaQ.data}
-              canEdit={isEditor}
+              canEdit={can('files.metadata.edit')}
               onEdit={(name, current) => setEditField({ name, current })}
             />
           )}

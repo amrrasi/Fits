@@ -12,6 +12,7 @@ import (
 	"github.com/amrrasi/fits/internal/models"
 )
 
+// FileRepository handles fits_files persistence.
 type FileRepository struct {
 	pool *pgxpool.Pool
 }
@@ -20,6 +21,7 @@ func NewFileRepository(pool *pgxpool.Pool) *FileRepository {
 	return &FileRepository{pool: pool}
 }
 
+// UpsertFile inserts or updates a fits_files row by file_path. Returns the row ID.
 func (r *FileRepository) UpsertFile(ctx context.Context, tx pgx.Tx, f *models.FITSFile) (int64, error) {
 	const q = `
 		INSERT INTO fits_files (file_path, file_name, file_size, checksum, hdu_count, status, created_at, updated_at)
@@ -45,6 +47,7 @@ func (r *FileRepository) UpsertFile(ctx context.Context, tx pgx.Tx, f *models.FI
 	return id, nil
 }
 
+// UpdateStatus sets status, error_message, processed_at, and optional processing_ms.
 func (r *FileRepository) UpdateStatus(ctx context.Context, tx pgx.Tx, id int64, status models.FileStatus, errMsg *string, processingMs *int64) error {
 	const q = `
 		UPDATE fits_files
@@ -62,6 +65,7 @@ func (r *FileRepository) UpdateStatus(ctx context.Context, tx pgx.Tx, id int64, 
 	return nil
 }
 
+// GetByID returns a single fits_files row.
 func (r *FileRepository) GetByID(ctx context.Context, id int64) (*models.FITSFile, error) {
 	const q = `
 		SELECT id, file_path, file_name, file_size, checksum, hdu_count,
@@ -82,6 +86,10 @@ func (r *FileRepository) GetByID(ctx context.Context, id int64) (*models.FITSFil
 	return f, nil
 }
 
+// PathDoneWithChecksum returns true if this exact path already has a completed
+// row with this checksum — i.e. an idempotent re-scan of an unchanged file.
+// This is NOT a "duplicate" (same content under a different name); it's the
+// same file seen again and needs no work at all.
 func (r *FileRepository) PathDoneWithChecksum(ctx context.Context, path, checksum string) (bool, error) {
 	var exists bool
 	err := r.pool.QueryRow(ctx,
@@ -94,6 +102,9 @@ func (r *FileRepository) PathDoneWithChecksum(ctx context.Context, path, checksu
 	return exists, nil
 }
 
+// FindDoneByChecksum returns the first completed file whose content matches
+// checksum, excluding excludePath itself. A non-nil result means the file
+// currently being scanned is duplicate content of an already-stored file.
 func (r *FileRepository) FindDoneByChecksum(ctx context.Context, checksum, excludePath string) (*models.FITSFile, error) {
 	const q = `
 		SELECT id, file_path, file_name
@@ -112,6 +123,8 @@ func (r *FileRepository) FindDoneByChecksum(ctx context.Context, checksum, exclu
 	return f, nil
 }
 
+// MarkSkipped marks a file row as skipped (e.g. duplicate content) with a
+// human-readable reason, without touching header/metadata tables.
 func (r *FileRepository) MarkSkipped(ctx context.Context, id int64, reason string) error {
 	const q = `
 		UPDATE fits_files
@@ -123,6 +136,7 @@ func (r *FileRepository) MarkSkipped(ctx context.Context, id int64, reason strin
 	return nil
 }
 
+// Delete removes a fits_files row (cascades to headers, metadata, overrides).
 func (r *FileRepository) Delete(ctx context.Context, id int64) error {
 	tag, err := r.pool.Exec(ctx, `DELETE FROM fits_files WHERE id=$1`, id)
 	if err != nil {
@@ -134,13 +148,16 @@ func (r *FileRepository) Delete(ctx context.Context, id int64) error {
 	return nil
 }
 
+// ── List with filters ─────────────────────────────────────────────────────────
+
+// ListFilesFilter controls filtering and pagination for ListFiles.
 type ListFilesFilter struct {
-	Search    string
+	Search    string // partial match on file_name
 	Status    models.FileStatus
 	DateFrom  *time.Time
 	DateTo    *time.Time
-	SortBy    string
-	SortOrder string
+	SortBy    string // created_at | file_name | file_size | processed_at
+	SortOrder string // asc | desc
 	Page      int
 	PageSize  int
 }
@@ -164,7 +181,7 @@ func (r *FileRepository) ListFiles(ctx context.Context, f ListFilesFilter) (*Lis
 
 	if f.Search != "" {
 		where = append(where, fmt.Sprintf("f.file_name ILIKE $%d", idx))
-		args = append(args, "%"+f.Search+"%")
+		args = append(args, "%"+escapeLike(f.Search)+"%")
 		idx++
 	}
 	if f.Status != "" {
@@ -185,6 +202,7 @@ func (r *FileRepository) ListFiles(ctx context.Context, f ListFilesFilter) (*Lis
 
 	clause := strings.Join(where, " AND ")
 
+	// Count
 	var total int
 	if err := r.pool.QueryRow(ctx,
 		fmt.Sprintf("SELECT COUNT(*) FROM fits_files f WHERE %s", clause),
@@ -203,6 +221,7 @@ func (r *FileRepository) ListFiles(ctx context.Context, f ListFilesFilter) (*Lis
 		sortDir = "ASC"
 	}
 
+	// Page
 	if f.Page < 1 {
 		f.Page = 1
 	}

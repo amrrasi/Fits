@@ -1,5 +1,14 @@
 # FITS Processor — Full Project TODO & Improvement Checklist
 
+> **Security hardening pass (done):** scan-path restriction, atomic single-use refresh tokens in an HttpOnly cookie,
+> session revocation, per-request role/permission re-check, login throttling + uniform errors, password policy,
+> forced password change, real audit log, last-admin guard (transactional), advisory-lock scan (crash-safe),
+> parser panic recovery, CSP/HSTS/CORS fixes, LIKE-wildcard escaping, audit retention, permission-based UI,
+> device/session management page, manual metadata edits preserved on re-scan, tests + `scripts/smoke_test.sh`.
+>
+> **Still open (by choice):** login throttle is in-memory (single instance); no 2FA; absolute file paths are shown to
+> everyone with `files.view`; no automatic DB backup (use `pg_dump`).
+
 This file tracks every known issue, improvement, and missing feature across the codebase.
 Items are grouped by priority: 🔴 Critical (must fix before Phase 4) → 🟠 Important → 🟡 Nice to have → 🟢 Frontend.
 

@@ -110,20 +110,25 @@ func decodeBody(w http.ResponseWriter, r *http.Request, dst interface{}, optiona
 	return true
 }
 
+// DecodeJSON decodes a required JSON body (strict: unknown fields rejected).
 func DecodeJSON(w http.ResponseWriter, r *http.Request, dst interface{}) bool {
 	return decodeBody(w, r, dst, false)
 }
 
+// DecodeJSONOptional is like DecodeJSON but accepts an empty body.
 func DecodeJSONOptional(w http.ResponseWriter, r *http.Request, dst interface{}) bool {
 	return decodeBody(w, r, dst, true)
 }
 
+// ValidationError is a user-facing (400) error that is safe to show to clients.
 type ValidationError struct{ Msg string }
 
 func (e *ValidationError) Error() string { return e.Msg }
 
+// Invalid builds a ValidationError.
 func Invalid(msg string) error { return &ValidationError{Msg: msg} }
 
+// WriteError maps validation errors to 400 and everything else to a generic 500.
 func WriteError(w http.ResponseWriter, err error) {
 	var ve *ValidationError
 	if errors.As(err, &ve) {

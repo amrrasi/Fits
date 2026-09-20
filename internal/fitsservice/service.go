@@ -30,12 +30,15 @@ type Service struct {
 	scanner  Scanner
 }
 
+// Scanner starts a background scan (implemented by fits.Processor).
 type Scanner interface {
 	Start(scanDir string) (int64, error)
 }
 
+// SetScanner wires the processor used by TriggerScan.
 func (s *Service) SetScanner(sc Scanner) { s.scanner = sc }
 
+// Ping checks database connectivity (used by /ready).
 func (s *Service) Ping(ctx context.Context) error { return s.pool.Ping(ctx) }
 
 func New(
@@ -69,6 +72,7 @@ func (s *Service) DeleteFile(ctx context.Context, id int64) error {
 }
 
 func (s *Service) ListHeaders(ctx context.Context, f repository.ListHeadersFilter) (*repository.ListHeadersResult, error) {
+	// Verify file exists first
 	if _, err := s.files.GetByID(ctx, f.FileID); err != nil {
 		return nil, err
 	}
@@ -113,6 +117,7 @@ func (s *Service) EditMetadata(ctx context.Context, in EditMetadataInput) error 
 		reasonPtr = &r
 	}
 	editorID := in.EditorID
+	// override history + value update happen in ONE transaction
 	if err := s.metadata.EditFieldTx(ctx, &repository.MetadataOverride{
 		FileID: in.FileID, FieldName: in.FieldName, OriginalValue: currentFieldValue(current, in.FieldName),
 		NewValue: in.NewValue, Reason: reasonPtr, EditedBy: &editorID,
@@ -142,6 +147,8 @@ func (s *Service) GetJobErrors(ctx context.Context, jobID int64, page, pageSize 
 	return s.jobs.ListErrors(ctx, jobID, page, pageSize)
 }
 
+// TriggerScan validates the requested directory (must be inside the configured scan root)
+// and starts a background scan. Returns the job id and the resolved directory.
 func (s *Service) TriggerScan(_ context.Context, requested string) (int64, string, error) {
 	dir, err := fits.ResolveScanDir(s.scanRoot, requested)
 	if err != nil {

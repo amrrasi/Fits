@@ -126,6 +126,7 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 
 	safe := user.ToSafe()
 	safe.Permissions = claims.Permissions
+	safe.MustChangePassword = claims.MustChange
 	api.WriteOK(w, safe)
 }
 

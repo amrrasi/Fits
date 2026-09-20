@@ -2,8 +2,7 @@ import api from './client'
 import type {
   TokenPair, SafeUser, FITSFile, FITSHeader, FITSMetadata,
   MetadataOverride, ProcessingJob, ProcessingError,
-  ApiResponse, PagedResponse,
-} from '../types'
+  ApiResponse, PagedResponse, SessionInfo } from '../types'
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
@@ -14,6 +13,8 @@ export const authApi = {
   // The refresh token lives in an httpOnly cookie — JS never sees it.
   logout: () => api.post('/auth/logout'),
   logoutAll: () => api.post('/auth/logout-all'),
+  sessions: () => api.get<ApiResponse<SessionInfo[]>>('/auth/sessions').then((r) => r.data.data),
+  revokeSession: (id: string) => api.delete(`/auth/sessions/${id}`),
   refresh: () => api.post<TokenPair>('/auth/refresh').then((r) => r.data),
 }
 

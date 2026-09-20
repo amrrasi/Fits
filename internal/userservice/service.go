@@ -118,6 +118,10 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (int64, error) {
 	if err := s.rbac.SetPrimaryBuiltinRole(ctx, id, string(in.Role)); err != nil {
 		return 0, fmt.Errorf("userservice: assign role: %w", err)
 	}
+	// the admin knows this initial password, so the user must replace it at first login
+	if err := s.repo.SetMustChange(ctx, id, true); err != nil {
+		return 0, fmt.Errorf("userservice: set must-change: %w", err)
+	}
 	return id, nil
 }
 
@@ -184,6 +188,10 @@ func (s *Service) ChangePassword(ctx context.Context, in ChangePasswordInput) er
 	if err := s.repo.UpdatePassword(ctx, in.UserID, hash); err != nil {
 		return err
 	}
+	if err := s.repo.SetMustChange(ctx, in.UserID, false); err != nil {
+		return err
+	}
+	s.inv.Invalidate(in.UserID)
 	// every OTHER device is signed out
 	return s.repo.DeleteOtherSessions(ctx, in.UserID, in.KeepSession)
 }
@@ -204,6 +212,9 @@ func (s *Service) AdminResetPassword(ctx context.Context, userID int64, newPassw
 		return err
 	}
 	if err := s.repo.DeleteAllUserSessions(ctx, userID); err != nil {
+		return err
+	}
+	if err := s.repo.SetMustChange(ctx, userID, true); err != nil {
 		return err
 	}
 	s.inv.Invalidate(userID)

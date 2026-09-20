@@ -88,10 +88,12 @@ type HTTPConfig struct {
 
 	StaticDir string
 
-	TrustedProxies []string
-	CookieSecure   bool
-	AdminEmail     string
+	TrustedProxies []string // CIDRs/IPs allowed to set X-Forwarded-For
+	CookieSecure   bool     // Secure flag on the refresh cookie
+	AdminEmail     string   // optional first-admin bootstrap
 	AdminPassword  string
+
+	AuditRetentionDays int // 0 = keep forever
 }
 
 var insecureDefaults = []string{
@@ -112,7 +114,7 @@ func Load(envFile string) (*Config, error) {
 		Host:            getEnv("DB_HOST", "localhost"),
 		Port:            getEnvInt("DB_PORT", 5432),
 		User:            getEnv("DB_USER", "postgres"),
-		Password:        getEnv("DB_PASSWORD", "amirpopass83"),
+		Password:        getEnv("DB_PASSWORD", ""),
 		Name:            getEnv("DB_NAME", "fits_db"),
 		SSLMode:         getEnv("DB_SSLMODE", "disable"),
 		MaxOpenConns:    getEnvInt("DB_MAX_OPEN_CONNS", 25),
@@ -165,6 +167,7 @@ func Load(envFile string) (*Config, error) {
 		CookieSecure:       getEnvBool("COOKIE_SECURE", getEnv("APP_ENV", "development") == "production"),
 		AdminEmail:         strings.ToLower(strings.TrimSpace(getEnv("ADMIN_EMAIL", "admin@fits.local"))),
 		AdminPassword:      getEnv("ADMIN_PASSWORD", ""),
+		AuditRetentionDays: getEnvInt("AUDIT_RETENTION_DAYS", 365),
 	}
 
 	if err := cfg.validate(); err != nil {

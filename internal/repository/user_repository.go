@@ -370,38 +370,54 @@ func (r *UserRepository) CountActiveAdmins(ctx context.Context) (int, error) {
 	return n, err
 }
 
-// guardLastAdmin runs inside tx: locks admin rows and fails if `id` is the last active admin
-// and the change (demotion / deactivation / deletion) would remove it.
+// guardLastAdmin runs inside tx. Locking order is always "all active admins by id, ascending"
+// (never "own row first"), so concurrent demotions cannot deadlock; the loser is re-evaluated after
+// the winner commits and correctly sees that no other admin remains.
 func guardLastAdmin(ctx context.Context, tx pgx.Tx, id int64, stillAdminActive bool) error {
 	var role string
 	var active bool
-	err := tx.QueryRow(ctx, `SELECT role::text, is_active FROM users WHERE id = $1 FOR UPDATE`, id).Scan(&role, &active)
+	err := tx.QueryRow(ctx, `SELECT role::text, is_active FROM users WHERE id = $1`, id).Scan(&role, &active)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
 	}
 	if err != nil {
 		return err
 	}
-	if role != "admin" || !active || stillAdminActive {
-		return nil
+	if role != "admin" || !active {
+		// not an active admin: just lock the row so it cannot change under us
+		_, err := tx.Exec(ctx, `SELECT 1 FROM users WHERE id = $1 FOR UPDATE`, id)
+		return err
 	}
-	rows, err := tx.Query(ctx, `SELECT id FROM users WHERE role = 'admin' AND is_active FOR UPDATE`)
+	rows, err := tx.Query(ctx, `SELECT id FROM users WHERE role = 'admin' AND is_active ORDER BY id FOR UPDATE`)
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
-	others := 0
+	var locked []int64
 	for rows.Next() {
 		var uid int64
 		if err := rows.Scan(&uid); err != nil {
+			rows.Close()
 			return err
 		}
-		if uid != id {
+		locked = append(locked, uid)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if stillAdminActive {
+		return nil
+	}
+	others, targetLocked := 0, false
+	for _, uid := range locked {
+		if uid == id {
+			targetLocked = true
+		} else {
 			others++
 		}
 	}
-	if err := rows.Err(); err != nil {
-		return err
+	if !targetLocked { // it stopped being an active admin while we waited
+		return nil
 	}
 	if others == 0 {
 		return ErrLastAdmin

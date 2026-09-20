@@ -1,3 +1,5 @@
+// Package fitshandler provides HTTP handlers for FITS data endpoints.
+// All business logic lives in fitsservice — handlers only parse, call, respond.
 package fitshandler
 
 import (
@@ -16,11 +18,13 @@ import (
 	"github.com/amrrasi/fits/internal/repository"
 )
 
+// Handler exposes FITS data endpoints.
 type Handler struct {
 	svc   *fitsservice.Service
 	audit *audit.Recorder
 }
 
+// New creates a Handler.
 func New(svc *fitsservice.Service, rec *audit.Recorder) *Handler {
 	return &Handler{svc: svc, audit: rec}
 }
@@ -33,33 +37,45 @@ func actor(r *http.Request) *int64 {
 	return nil
 }
 
+// RegisterRoutes wires all endpoints onto mux. authMW validates the bearer
+// token; each route is additionally gated by its own fine-grained permission
+// (resolved from the RBAC tables at login time — see internal/auth).
 func (h *Handler) RegisterRoutes(
 	mux *http.ServeMux,
 	authMW func(http.Handler) http.Handler,
 ) {
 	perm := auth.RequirePermission
 
+	// Files
 	mux.Handle("GET /api/files", authMW(perm("files.view")(http.HandlerFunc(h.ListFiles))))
 	mux.Handle("GET /api/files/{id}", authMW(perm("files.view")(http.HandlerFunc(h.GetFile))))
 	mux.Handle("DELETE /api/files/{id}", authMW(perm("files.delete")(http.HandlerFunc(h.DeleteFile))))
 
+	// Headers
 	mux.Handle("GET /api/files/{id}/headers", authMW(perm("files.view")(http.HandlerFunc(h.ListHeaders))))
 
+	// Metadata
 	mux.Handle("GET /api/files/{id}/metadata", authMW(perm("files.view")(http.HandlerFunc(h.GetMetadata))))
 	mux.Handle("PUT /api/files/{id}/metadata", authMW(perm("files.metadata.edit")(http.HandlerFunc(h.EditMetadata))))
 	mux.Handle("GET /api/files/{id}/metadata/history", authMW(perm("files.view")(http.HandlerFunc(h.GetMetadataHistory))))
 
+	// Jobs
 	mux.Handle("GET /api/jobs", authMW(perm("jobs.view")(http.HandlerFunc(h.ListJobs))))
 	mux.Handle("GET /api/jobs/{id}", authMW(perm("jobs.view")(http.HandlerFunc(h.GetJob))))
 	mux.Handle("GET /api/jobs/{id}/errors", authMW(perm("jobs.view")(http.HandlerFunc(h.GetJobErrors))))
 	mux.Handle("GET /api/jobs/{id}/status", authMW(perm("jobs.view")(http.HandlerFunc(h.GetJobStatus))))
 
+	// Scan trigger
 	mux.Handle("POST /api/scan", authMW(perm("files.scan")(http.HandlerFunc(h.TriggerScan))))
 
+	// Stats (dashboard) — anyone who can view files can see the summary
 	mux.Handle("GET /api/stats", authMW(perm("files.view")(http.HandlerFunc(h.Stats))))
 
+	// Readiness
 	mux.HandleFunc("GET /ready", h.Ready)
 }
+
+// ── GET /api/files ────────────────────────────────────────────────────────────
 
 func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
 	page, pageSize, _ := api.Pagination(r)
@@ -94,6 +110,8 @@ func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
 	api.WritePaged(w, result.Files, result.Total, page, pageSize)
 }
 
+// ── GET /api/files/{id} ───────────────────────────────────────────────────────
+
 func (h *Handler) GetFile(w http.ResponseWriter, r *http.Request) {
 	id, err := api.PathID(r, "id")
 	if err != nil {
@@ -111,6 +129,8 @@ func (h *Handler) GetFile(w http.ResponseWriter, r *http.Request) {
 	}
 	api.WriteOK(w, file)
 }
+
+// ── DELETE /api/files/{id} (admin) ───────────────────────────────────────────
 
 func (h *Handler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 	id, err := api.PathID(r, "id")
@@ -134,6 +154,8 @@ func (h *Handler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 	h.audit.Log(r, actor(r), "file.delete", "fits_file", strconv.FormatInt(id, 10), oldVal, nil)
 	api.WriteNoContent(w)
 }
+
+// ── GET /api/files/{id}/headers ───────────────────────────────────────────────
 
 func (h *Handler) ListHeaders(w http.ResponseWriter, r *http.Request) {
 	id, err := api.PathID(r, "id")
@@ -164,6 +186,8 @@ func (h *Handler) ListHeaders(w http.ResponseWriter, r *http.Request) {
 	api.WritePaged(w, result.Headers, result.Total, page, pageSize)
 }
 
+// ── GET /api/files/{id}/metadata ─────────────────────────────────────────────
+
 func (h *Handler) GetMetadata(w http.ResponseWriter, r *http.Request) {
 	id, err := api.PathID(r, "id")
 	if err != nil {
@@ -181,6 +205,8 @@ func (h *Handler) GetMetadata(w http.ResponseWriter, r *http.Request) {
 	}
 	api.WriteOK(w, meta)
 }
+
+// ── PUT /api/files/{id}/metadata (editor/admin) ───────────────────────────────
 
 type editMetadataRequest struct {
 	FieldName string `json:"field_name"`
@@ -233,6 +259,8 @@ func (h *Handler) EditMetadata(w http.ResponseWriter, r *http.Request) {
 	api.WriteOK(w, meta)
 }
 
+// ── GET /api/files/{id}/metadata/history ─────────────────────────────────────
+
 func (h *Handler) GetMetadataHistory(w http.ResponseWriter, r *http.Request) {
 	id, err := api.PathID(r, "id")
 	if err != nil {
@@ -250,6 +278,8 @@ func (h *Handler) GetMetadataHistory(w http.ResponseWriter, r *http.Request) {
 	api.WriteOK(w, overrides)
 }
 
+// ── GET /api/jobs ─────────────────────────────────────────────────────────────
+
 func (h *Handler) ListJobs(w http.ResponseWriter, r *http.Request) {
 	page, pageSize, _ := api.Pagination(r)
 	jobs, total, err := h.svc.ListJobs(r.Context(), page, pageSize)
@@ -262,6 +292,8 @@ func (h *Handler) ListJobs(w http.ResponseWriter, r *http.Request) {
 	}
 	api.WritePaged(w, jobs, total, page, pageSize)
 }
+
+// ── GET /api/jobs/{id} ────────────────────────────────────────────────────────
 
 func (h *Handler) GetJob(w http.ResponseWriter, r *http.Request) {
 	id, err := api.PathID(r, "id")
@@ -280,6 +312,8 @@ func (h *Handler) GetJob(w http.ResponseWriter, r *http.Request) {
 	}
 	api.WriteOK(w, job)
 }
+
+// ── GET /api/jobs/{id}/errors ─────────────────────────────────────────────────
 
 func (h *Handler) GetJobErrors(w http.ResponseWriter, r *http.Request) {
 	id, err := api.PathID(r, "id")
@@ -302,6 +336,8 @@ func (h *Handler) GetJobErrors(w http.ResponseWriter, r *http.Request) {
 	}
 	api.WritePaged(w, errs, total, page, pageSize)
 }
+
+// ── GET /api/jobs/{id}/status ─────────────────────────────────────────────────
 
 func (h *Handler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
 	id, err := api.PathID(r, "id")
@@ -327,6 +363,8 @@ func (h *Handler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
 		"finished_at": job.FinishedAt,
 	})
 }
+
+// ── POST /api/scan (admin) ────────────────────────────────────────────────────
 
 type triggerScanRequest struct {
 	ScanDir string `json:"scan_dir"`
@@ -354,6 +392,8 @@ func (h *Handler) TriggerScan(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ── GET /ready ────────────────────────────────────────────────────────────────
+
 func (h *Handler) Ready(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
@@ -365,6 +405,9 @@ func (h *Handler) Ready(w http.ResponseWriter, r *http.Request) {
 	}
 	_, _ = w.Write([]byte(`{"status":"ready","service":"fits-processor"}`))
 }
+
+// ── GET /api/stats ────────────────────────────────────────────────────────────
+// Returns summary counts for the dashboard. Public to all authenticated users.
 
 func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
 	stats, err := h.svc.GetStats(r.Context())

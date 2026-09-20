@@ -209,9 +209,14 @@ The Docker image:
 |---|---|---|
 | `GET` | `/health` | Liveness check |
 | `GET` | `/ready` | Readiness check |
-| `POST` | `/api/auth/login` | Login → returns token pair |
-| `POST` | `/api/auth/logout` | Revoke refresh token |
-| `POST` | `/api/auth/refresh` | Rotate token pair |
+| `POST` | `/api/auth/login` | Login → access token in the body, refresh token in an `HttpOnly` cookie |
+| `POST` | `/api/auth/refresh` | Rotate the refresh cookie (single-use) and get a new access token |
+| `POST` | `/api/auth/logout` | Revoke this device's refresh token |
+| `POST` | `/api/auth/logout-all` | Revoke every session of the current user |
+| `GET` | `/api/auth/sessions` | List own active devices |
+| `DELETE` | `/api/auth/sessions/{id}` | Sign out one own device |
+
+> Every state-changing `/api/auth/*` call must send the header `X-Requested-With: fits` (CSRF defence). The refresh token is never present in JSON.
 
 ### FITS data (any authenticated role)
 
@@ -273,6 +278,7 @@ The Docker image:
 | `DB_NAME` | `fits_db` | Database name |
 | `DB_SSLMODE` | `disable` | `disable` / `require` |
 | `JWT_ACCESS_SECRET` | _(insecure default)_ | Min 32 chars in production |
+| `AUDIT_RETENTION_DAYS` | `365` | Audit-log rows older than this are deleted hourly (`0` = keep forever) |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | `admin@fits.local` / _(random, printed once)_ | First admin, created only when no active admin exists |
 | `TRUSTED_PROXIES` | _(none)_ | CIDRs allowed to set `X-Forwarded-For` |
 | `COOKIE_SECURE` | `true` in production | `Secure` flag of the refresh cookie |
@@ -317,3 +323,12 @@ The Docker image:
 | `logs/fits-processor-YYYY-MM-DD.error.log` | Errors only — JSON |
 
 Console output is human-readable. Set `LOG_LEVEL=debug` for per-file and per-keyword detail.
+
+
+## Security notes
+
+- Passwords: min 10 chars, letters + digits, max 72 bytes, common passwords rejected. Users created or reset by an admin must choose a new password at first login (`must_change_password`).
+- Roles and permissions are re-read from the database on every request (10 s cache, invalidated on change), so deactivating a user or changing a role takes effect immediately.
+- Failed logins are throttled per account+IP, per IP and per e-mail (in memory, single instance).
+- A manual metadata edit survives a re-scan of the same file.
+- Post-deploy check: `ADMIN_PASSWORD=... ./scripts/smoke_test.sh http://host:8080`

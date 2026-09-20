@@ -265,3 +265,46 @@ export function Avatar({ name, size = 32 }: { name?: string; size?: number }) {
     </span>
   )
 }
+
+// ── Password strength (mirrors the server-side policy) ────────────────────────
+
+const COMMON = ['password', 'password1', '1234567890', 'qwertyuiop', 'admin12345', 'letmein123', '0123456789', 'welcome123']
+
+export function passwordChecks(pw: string, email = '') {
+  const local = email.split('@')[0]?.toLowerCase() ?? ''
+  return [
+    { label: 'حداقل ۱۰ کاراکتر', ok: pw.length >= 10 },
+    { label: 'ترکیب حروف و عدد', ok: /[0-9]/.test(pw) && /[^0-9]/.test(pw) },
+    { label: 'رمز رایج یا تکراری نباشد', ok: pw.length > 0 && !COMMON.includes(pw.toLowerCase()) && !/^(.)\1+$/.test(pw) },
+    ...(local.length >= 4 ? [{ label: 'شامل نام‌کاربری ایمیل نباشد', ok: !pw.toLowerCase().includes(local) }] : []),
+  ]
+}
+
+export function PasswordStrength({ value, email }: { value: string; email?: string }) {
+  if (!value) return null
+  const checks = passwordChecks(value, email)
+  const passed = checks.filter((c) => c.ok).length
+  const extra = (value.length >= 14 ? 1 : 0) + (/[A-Z]/.test(value) && /[a-z]/.test(value) ? 1 : 0) + (/[^A-Za-z0-9]/.test(value) ? 1 : 0)
+  const score = passed === checks.length ? Math.min(4, 1 + extra) : Math.min(passed, 1)
+  const colors = ['bg-danger', 'bg-warning', 'bg-warning', 'bg-success', 'bg-success']
+  const labels = ['ضعیف', 'ضعیف', 'متوسط', 'خوب', 'عالی']
+  return (
+    <div className="mt-2 space-y-1.5" aria-live="polite">
+      <div className="flex items-center gap-2">
+        <div className="flex gap-1 flex-1">
+          {[0, 1, 2, 3].map((i) => (
+            <span key={i} className={clsx('h-1.5 flex-1 rounded-full transition-colors', i < score ? colors[score] : 'bg-surface2')} />
+          ))}
+        </div>
+        <span className="text-xs text-text-secondary w-10">{labels[score]}</span>
+      </div>
+      <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-0.5">
+        {checks.map((c) => (
+          <li key={c.label} className={clsx('text-xs flex items-center gap-1.5', c.ok ? 'text-success' : 'text-text-muted')}>
+            <span aria-hidden>{c.ok ? '✓' : '○'}</span>{c.label}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}

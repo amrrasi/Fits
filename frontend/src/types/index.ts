@@ -11,6 +11,7 @@ export interface SafeUser {
   last_login_at?: string
   created_at: string
   permissions?: string[]
+  must_change_password?: boolean
 }
 
 export interface TokenPair {
@@ -156,4 +157,13 @@ export interface PagedResponse<T> {
 export interface ApiError {
   error: string
   code: number
+}
+
+export interface SessionInfo {
+  id: string
+  user_agent: string
+  ip_address: string
+  created_at: string
+  expires_at: string
+  current: boolean
 }

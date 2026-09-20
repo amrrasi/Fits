@@ -8,7 +8,7 @@ import { formatDate } from '../../utils/format'
 import { useAuth } from '../../context/AuthContext'
 
 export default function DashboardPage() {
-  const { isAdmin, user } = useAuth()
+  const { can, user } = useAuth()
   const hour = new Date().getHours()
   const greet = hour < 5 ? 'شب بخیر' : hour < 12 ? 'صبح بخیر' : hour < 17 ? 'ظهر بخیر' : hour < 20 ? 'عصر بخیر' : 'شب بخیر'
   const firstName = (user?.full_name ?? '').split(' ')[0]
@@ -39,8 +39,8 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-extrabold text-text">{greet}{firstName ? `، ${firstName}` : ''}</h1>
-        <p className="text-sm text-text-secondary mt-1">مشاهده خلاصه وضعیت فایل‌های فیتس</p>
+        <h1 className="text-2xl font-extrabold text-text">{greet}{firstName ? `، ${firstName}` : ''} 👋</h1>
+        <p className="text-sm text-text-secondary mt-1">این هم خلاصه‌ی وضعیت رصدخانه‌ی داده‌هایت</p>
       </div>
 
       {/* Running job banner */}
@@ -77,7 +77,7 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <h2 className="text-sm font-semibold text-text">آخرین اسکن‌ها</h2>
           <div className="flex items-center gap-3">
-            {isAdmin && <ScanButton />}
+            {can('files.scan') && <ScanButton />}
             <Link to="/jobs" className="text-sm text-accent-600 hover:text-accent-700 font-medium">همه اسکن‌ها →</Link>
           </div>
         </div>

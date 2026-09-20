@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react'
-import { authApi } from '../api/endpoints'
+import { authApi, usersApi } from '../api/endpoints'
 import { tokenStore, silentRefresh, setSessionExpiredHandler } from '../api/client'
 import type { SafeUser, TokenPair } from '../types'
 
@@ -14,6 +14,8 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<void>
   logout: () => Promise<void>
   logoutAll: () => Promise<void>
+  /** re-read the current user (e.g. after the forced password change) */
+  refreshUser: () => Promise<void>
   setTokenPair: (pair: TokenPair) => void
 }
 
@@ -55,6 +57,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
   }, [])
 
+  const refreshUser = useCallback(async () => {
+    try {
+      const me = await usersApi.me()
+      setUser((prev) => (prev ? { ...prev, ...me } : me))
+    } catch { /* ignore */ }
+  }, [])
+
   const can = useCallback(
     (p: string) => !!user?.permissions?.includes(p),
     [user],
@@ -66,7 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated: !!user,
       isAdmin: user?.role === 'admin',
       isEditor: user?.role === 'admin' || user?.role === 'editor',
-      can, login, logout, logoutAll, setTokenPair,
+      can, login, logout, logoutAll, refreshUser, setTokenPair,
     }}>
       {children}
     </AuthContext.Provider>

@@ -266,3 +266,51 @@ func (r *MetadataRepository) EditFieldTx(ctx context.Context, o *MetadataOverrid
 	}
 	return tx.Commit(ctx)
 }
+
+// ReapplyOverrides re-applies the latest manual edit of every field after a re-scan has
+// refreshed fits_metadata from the file, so human corrections are never silently lost.
+// Runs inside the scan transaction; a bad override is skipped (savepoint), not fatal.
+func (r *MetadataRepository) ReapplyOverrides(ctx context.Context, tx pgx.Tx, fileID int64) (int, error) {
+	rows, err := tx.Query(ctx, `
+		SELECT DISTINCT ON (field_name) field_name, new_value
+		FROM metadata_overrides WHERE file_id = $1
+		ORDER BY field_name, created_at DESC, id DESC`, fileID)
+	if err != nil {
+		return 0, err
+	}
+	type ov struct{ field, value string }
+	var list []ov
+	for rows.Next() {
+		var o ov
+		if err := rows.Scan(&o.field, &o.value); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		list = append(list, o)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	applied := 0
+	allowed := allowedEditFields()
+	for _, o := range list {
+		f := strings.ToLower(o.field)
+		if _, ok := allowed[f]; !ok {
+			continue
+		}
+		sp, err := tx.Begin(ctx) // savepoint
+		if err != nil {
+			return applied, err
+		}
+		if _, err := sp.Exec(ctx, fmt.Sprintf(`UPDATE fits_metadata SET %s=$2, updated_at=NOW() WHERE file_id=$1`, f), fileID, o.value); err != nil {
+			_ = sp.Rollback(ctx)
+			continue
+		}
+		if err := sp.Commit(ctx); err != nil {
+			return applied, err
+		}
+		applied++
+	}
+	return applied, nil
+}

@@ -14,6 +14,7 @@ import (
 
 const maxSessionsPerUser = 10
 
+// ErrInvalidCredentials is deliberately the ONLY login failure message (no user enumeration).
 var (
 	ErrInvalidCredentials = errors.New("ایمیل یا رمز عبور صحیح نیست")
 	ErrInvalidRefresh     = errors.New("نشست شما منقضی شده است؛ دوباره وارد شوید")
@@ -56,6 +57,7 @@ func (s *Service) Login(ctx context.Context, email, password, userAgent, ip stri
 		logger.S().Warnw("ورود ناموفق", "email", email, "ip", ip)
 		return nil, ErrInvalidCredentials
 	}
+	// password first, THEN active check: an outsider can't learn that an account is disabled
 	if CheckPassword(password, user.PasswordHash) != nil || !user.IsActive {
 		s.throttle.Fail(email, ip)
 		logger.S().Warnw("ورود ناموفق", "email", email, "ip", ip)
@@ -85,6 +87,7 @@ func (s *Service) Logout(ctx context.Context, rawRefreshToken string) error {
 	return s.users.DeleteSession(ctx, HashRefreshToken(rawRefreshToken))
 }
 
+// LogoutAll revokes every session of the user.
 func (s *Service) LogoutAll(ctx context.Context, userID int64) error {
 	if err := s.users.DeleteAllUserSessions(ctx, userID); err != nil {
 		return err
@@ -96,6 +99,7 @@ func (s *Service) Refresh(ctx context.Context, raw, userAgent, ip string) (*mode
 	if raw == "" {
 		return nil, ErrInvalidRefresh
 	}
+	// single-use: atomically consume, so a token can never be replayed concurrently
 	session, err := s.users.ConsumeSession(ctx, HashRefreshToken(raw))
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
@@ -134,5 +138,8 @@ func (s *Service) issueTokens(ctx context.Context, user *models.User, userAgent,
 	}
 	safe := user.ToSafe()
 	safe.Permissions = perms
+	if must, err := s.users.GetMustChange(ctx, user.ID); err == nil {
+		safe.MustChangePassword = must
+	}
 	return &models.TokenPair{AccessToken: access, RefreshToken: plain, ExpiresAt: exp, User: safe}, nil
 }

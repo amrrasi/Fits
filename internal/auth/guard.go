@@ -10,11 +10,12 @@ import (
 	"github.com/amrrasi/fits/internal/repository"
 )
 
-var ErrAccountInactive = errors.New("حساب کاربری توسط ادمین غیرفعال یا حذف شده است")
+var ErrAccountInactive = errors.New("حساب کاربری غیرفعال یا حذف شده است")
 
 type State struct {
-	User  *models.User
-	Perms []string
+	User       *models.User
+	Perms      []string
+	MustChange bool
 }
 
 type guardEntry struct {
@@ -22,6 +23,8 @@ type guardEntry struct {
 	exp time.Time
 }
 
+// Guard re-checks (with a very short cache) that the token's user still exists, is active,
+// and returns the CURRENT role/permissions - so revocations take effect immediately.
 type Guard struct {
 	users *repository.UserRepository
 	rbac  *repository.RBACRepository
@@ -59,7 +62,11 @@ func (g *Guard) Check(ctx context.Context, id int64) (*State, error) {
 	if err != nil {
 		return nil, err
 	}
-	st := &State{User: u, Perms: perms}
+	must, err := g.users.GetMustChange(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	st := &State{User: u, Perms: perms, MustChange: must}
 	g.mu.Lock()
 	if len(g.cache) > 5000 {
 		g.cache = map[int64]guardEntry{}

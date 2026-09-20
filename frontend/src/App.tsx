@@ -33,10 +33,12 @@ export default function App() {
               <Route path="/jobs/:id"   element={<JobDetailPage />} />
               <Route path="/profile"    element={<ProfilePage />} />
 
-              {/* Admin only */}
-              <Route element={<ProtectedRoute requiredRole="admin" />}>
+              {/* Permission-gated (works for custom roles) */}
+              <Route element={<ProtectedRoute permission="users.view" />}>
                 <Route path="/users"          element={<UsersPage />} />
                 <Route path="/users/:id"      element={<UserDetailPage />} />
+              </Route>
+              <Route element={<ProtectedRoute permission="audit.view" />}>
                 <Route path="/audit-logs"     element={<AuditLogPage />} />
               </Route>
             </Route>

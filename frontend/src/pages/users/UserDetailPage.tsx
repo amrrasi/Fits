@@ -12,7 +12,7 @@ import type { SafeUser } from '../../types'
 export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>()
   const userId = Number(id)
-  const { user: me } = useAuth()
+  const { user: me, can } = useAuth()
   const toast = useToast()
   const qc = useQueryClient()
 
@@ -51,13 +51,17 @@ export default function UserDetailPage() {
         </Link>
         <h1 className="text-xl font-bold text-text flex-1">جزئیات کاربر</h1>
         <div className="flex gap-2">
+          {can('users.edit') && (
           <button onClick={() => setShowEdit(true)} className="btn-secondary">
             <Pencil className="w-4 h-4" /> ویرایش
           </button>
+          )}
+          {can('users.reset_password') && (
           <button onClick={() => setShowReset(true)} className="btn-secondary">
             <KeyRound className="w-4 h-4" /> ریست رمز
           </button>
-          {!isSelf && (
+          )}
+          {can('users.delete') && !isSelf && (
             <button onClick={() => setShowDelete(true)} className="btn-danger">
               <Trash2 className="w-4 h-4" /> حذف
             </button>

@@ -23,12 +23,15 @@ type JWTConfig struct {
 	RefreshTTL   time.Duration
 }
 
+// Claims: only the user id travels inside the JWT. Role/permissions are loaded fresh
+// from the database by the auth middleware (Guard) and placed into the request context.
 type Claims struct {
 	UserID      int64       `json:"uid"`
 	Email       string      `json:"-"`
 	Role        models.Role `json:"-"`
 	FullName    string      `json:"-"`
 	Permissions []string    `json:"-"`
+	MustChange  bool        `json:"-"`
 	jwt.RegisteredClaims
 }
 
@@ -66,6 +69,7 @@ func (ts *TokenService) ValidateAccessToken(raw string) (*Claims, error) {
 	return claims, nil
 }
 
+// NewRefreshToken returns (plain, sha256-hex): 256 bits from crypto/rand.
 func NewRefreshToken() (string, string) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {

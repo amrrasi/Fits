@@ -58,8 +58,8 @@ func (r *HeaderRepository) DeleteByFileID(ctx context.Context, tx pgx.Tx, fileID
 // ListHeadersFilter paginates and filters headers for one file.
 type ListHeadersFilter struct {
 	FileID   int64
-	HDUIndex *int    // nil = all HDUs
-	Search   string  // partial match on keyword or value
+	HDUIndex *int   // nil = all HDUs
+	Search   string // partial match on keyword or value
 	Page     int
 	PageSize int
 }
@@ -81,7 +81,7 @@ func (r *HeaderRepository) ListHeaders(ctx context.Context, f ListHeadersFilter)
 	}
 	if f.Search != "" {
 		where = append(where, fmt.Sprintf("(keyword ILIKE $%d OR value ILIKE $%d)", idx, idx+1))
-		pat := "%" + f.Search + "%"
+		pat := "%" + escapeLike(f.Search) + "%"
 		args = append(args, pat, pat)
 		idx += 2
 	}

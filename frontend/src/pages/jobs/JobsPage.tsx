@@ -11,7 +11,7 @@ export default function JobsPage() {
   const [page, setPage] = useState(1)
   const [scanDir, setScanDir] = useState('')
   const [scanMsg, setScanMsg] = useState('')
-  const { isAdmin } = useAuth()
+  const { can } = useAuth()
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['jobs', page],
@@ -39,7 +39,7 @@ export default function JobsPage() {
           <p className="text-sm text-text-secondary mt-0.5">تاریخچه و وضعیت اسکن‌های FITS</p>
         </div>
 
-        {isAdmin && (
+        {can('files.scan') && (
           <div className="flex items-center gap-2">
             <input
               className="input w-56"

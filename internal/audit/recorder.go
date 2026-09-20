@@ -1,3 +1,4 @@
+// Package audit writes security-relevant events to the audit_logs table.
 package audit
 
 import (
@@ -14,6 +15,8 @@ type Recorder struct{ repo *repository.UserRepository }
 
 func New(repo *repository.UserRepository) *Recorder { return &Recorder{repo: repo} }
 
+// Log records an event. It never fails the request; errors are only logged.
+// Never pass secrets (passwords, tokens) in oldV/newV.
 func (r *Recorder) Log(req *http.Request, userID *int64, action, entityType, entityID string, oldV, newV interface{}) {
 	if r == nil || r.repo == nil {
 		return

@@ -14,12 +14,12 @@ import { Avatar } from '../ui'
 
 const navItems = [
   { to: '/dashboard', label: 'داشبورد',       icon: LayoutDashboard },
-  { to: '/files',     label: 'فایل‌های FITS',  icon: Files },
-  { to: '/jobs',      label: 'اسکن‌ها',        icon: Cpu },
+  { to: '/files',     label: 'فایل‌های FITS',  icon: Files, perm: 'files.view' },
+  { to: '/jobs',      label: 'اسکن‌ها',        icon: Cpu, perm: 'jobs.view' },
 ]
 const adminItems = [
-  { to: '/users',      label: 'کاربران',  icon: Users },
-  { to: '/audit-logs', label: 'گزارش‌ها', icon: Shield },
+  { to: '/users',      label: 'کاربران',  icon: Users, perm: 'users.view' },
+  { to: '/audit-logs', label: 'گزارش‌ها', icon: Shield, perm: 'audit.view' },
 ]
 const crumbs: Record<string, string> = {
   dashboard: 'داشبورد', files: 'فایل‌های FITS', jobs: 'اسکن‌ها',
@@ -130,7 +130,9 @@ function UserMenu() {
 }
 
 export default function AppLayout() {
-  const { user, isAdmin } = useAuth()
+  const { user, can } = useAuth()
+  const visibleNav = navItems.filter((i) => !i.perm || can(i.perm))
+  const visibleAdmin = adminItems.filter((i) => can(i.perm))
   const location = useLocation()
   const navigate = useNavigate()
   const [drawer, setDrawer] = useState(false)
@@ -181,11 +183,11 @@ export default function AppLayout() {
         </span>
       </Link>
       <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-1">
-        {navItems.map((i) => <NavItem key={i.to} {...i} />)}
-        {isAdmin && (
+        {visibleNav.map(({ perm: _p, ...i }) => <NavItem key={i.to} {...i} />)}
+        {visibleAdmin.length > 0 && (
           <>
             <p className="px-3 pt-5 pb-1.5 text-[11px] font-semibold text-text-muted">مدیریت</p>
-            {adminItems.map((i) => <NavItem key={i.to} {...i} />)}
+            {visibleAdmin.map(({ perm: _p, ...i }) => <NavItem key={i.to} {...i} />)}
           </>
         )}
       </nav>
@@ -240,7 +242,7 @@ export default function AppLayout() {
             <input ref={searchRef} value={q} onChange={(e) => setQ(e.target.value)} maxLength={100}
               className="input ps-9 pe-14 !rounded-full !bg-surface2 !border-transparent focus:!bg-surface"
               placeholder="جستجوی سریع فایل‌ها…" aria-label="جستجوی سریع" />
-            <span className="kbd absolute start-3 top-1/2 -translate-y-1/2 pointer-events-none hidden sm:inline-flex ltr">Ctrl K</span>
+            <span className="kbd absolute end-3 top-1/2 -translate-y-1/2 pointer-events-none hidden sm:inline-flex ltr">Ctrl K</span>
           </form>
 
           <div className="flex items-center gap-1 sm:gap-2 shrink-0">

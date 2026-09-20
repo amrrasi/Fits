@@ -43,7 +43,7 @@ export default function LoginPage() {
           <div className="mx-auto mb-4 w-14 h-14 rounded-2xl bg-gradient-to-br from-accent-400 to-accent-700 flex items-center justify-center shadow-lg shadow-accent-600/40">
             <Orbit className="w-7 h-7 text-white" />
           </div>
-          <h1 className="text-2xl font-extrabold text-white">سلام</h1>
+          <h1 className="text-2xl font-extrabold text-white">خوش آمدید 👋</h1>
           <p className="text-sm text-indigo-200/80 mt-1.5">برای دیدن آسمانِ داده‌هایتان وارد شوید</p>
         </div>
 
@@ -86,7 +86,7 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="text-center text-xs text-indigo-200/50 mt-5">ورود / لاگین</p>
+        <p className="text-center text-xs text-indigo-200/50 mt-5">اتصال شما امن است 🔒 · FITS Processor</p>
       </div>
     </div>
   )
