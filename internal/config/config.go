@@ -88,9 +88,9 @@ type HTTPConfig struct {
 
 	StaticDir string
 
-	TrustedProxies []string // CIDRs/IPs allowed to set X-Forwarded-For
-	CookieSecure   bool     // Secure flag on the refresh cookie
-	AdminEmail     string   // optional first-admin bootstrap
+	TrustedProxies []string
+	CookieSecure   bool
+	AdminEmail     string
 	AdminPassword  string
 }
 
