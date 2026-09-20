@@ -240,7 +240,7 @@ export default function AppLayout() {
             <input ref={searchRef} value={q} onChange={(e) => setQ(e.target.value)} maxLength={100}
               className="input ps-9 pe-14 !rounded-full !bg-surface2 !border-transparent focus:!bg-surface"
               placeholder="جستجوی سریع فایل‌ها…" aria-label="جستجوی سریع" />
-            <span className="kbd absolute end-3 top-1/2 -translate-y-1/2 pointer-events-none hidden sm:inline-flex ltr">Ctrl K</span>
+            <span className="kbd absolute start-3 top-1/2 -translate-y-1/2 pointer-events-none hidden sm:inline-flex ltr">Ctrl K</span>
           </form>
 
           <div className="flex items-center gap-1 sm:gap-2 shrink-0">
