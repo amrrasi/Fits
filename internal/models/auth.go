@@ -58,7 +58,7 @@ func (u *User) ToSafe() SafeUser {
 type Session struct {
 	ID           string    `db:"id"`
 	UserID       int64     `db:"user_id"`
-	RefreshToken string    `db:"refresh_token"` // stored as SHA-256 hash
+	RefreshToken string    `db:"refresh_token"`
 	UserAgent    string    `db:"user_agent"`
 	IPAddress    string    `db:"ip_address"`
 	ExpiresAt    time.Time `db:"expires_at"`
@@ -67,7 +67,7 @@ type Session struct {
 
 type TokenPair struct {
 	AccessToken  string    `json:"access_token"`
-	RefreshToken string    `json:"-"` // delivered only via httpOnly cookie
+	RefreshToken string    `json:"-"`
 	ExpiresAt    time.Time `json:"expires_at"`
 	User         SafeUser  `json:"user"`
 }
