@@ -30,8 +30,13 @@ const roleLabel: Record<string, string> = { admin: 'مدیر', editor: 'ویرا
 function useClickOutside(ref: React.RefObject<HTMLElement>, onOut: () => void) {
   useEffect(() => {
     const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onOut() }
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') onOut() }
     document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
+    document.addEventListener('keydown', esc)
+    return () => {
+      document.removeEventListener('mousedown', h)
+      document.removeEventListener('keydown', esc)
+    }
   }, [ref, onOut])
 }
 
@@ -69,7 +74,7 @@ function ThemeMenu() {
         {theme === 'dark' ? <Moon className="w-[18px] h-[18px]" /> : <Sun className="w-[18px] h-[18px]" />}
       </button>
       {open && (
-        <div className="menu absolute end-0 mt-2 z-40 !min-w-[10rem]">
+        <div className="menu absolute end-0 top-full mt-2 z-50 !min-w-[10rem]">
           {opts.map(({ v, label, icon: Icon }) => (
             <button key={v} className={clsx('menu-item', pref === v && 'bg-accent-500/10 text-accent-600 font-semibold')}
               onClick={() => { setPref(v); setOpen(false) }}>
@@ -107,7 +112,7 @@ function UserMenu() {
         <span className="hidden sm:block text-sm font-medium text-text max-w-[9rem] truncate">{user?.full_name}</span>
       </button>
       {open && (
-        <div className="menu absolute end-0 mt-2 z-40">
+        <div className="menu absolute end-0 top-full mt-2 z-50">
           <div className="px-2.5 py-2 mb-1 border-b border-border">
             <p className="text-sm font-bold text-text truncate">{user?.full_name}</p>
             <p className="text-xs text-text-muted truncate ltr">{user?.email}</p>
@@ -213,7 +218,7 @@ export default function AppLayout() {
       )}
 
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-16 bg-surface/90 backdrop-blur border-b border-border px-3 sm:px-5 flex items-center gap-3 shrink-0">
+        <header className="relative z-30 h-16 bg-surface/95 backdrop-blur border-b border-border px-3 sm:px-5 flex items-center gap-3 shrink-0">
           <button className="lg:hidden btn-ghost !p-2" onClick={() => setDrawer(true)} aria-label="باز کردن منو"><Menu className="w-5 h-5" /></button>
 
           {/* Breadcrumbs */}
@@ -254,7 +259,7 @@ export default function AppLayout() {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6">
+        <main className="relative z-0 flex-1 overflow-y-auto p-4 sm:p-6">
           <div className="max-w-7xl mx-auto enter"><Outlet /></div>
         </main>
       </div>
