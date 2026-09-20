@@ -15,8 +15,6 @@ type contextKey string
 
 const claimsKey contextKey = "claims"
 
-// Middleware validates the bearer token, then re-checks the user in the database
-// (via Guard) so deactivation / role changes apply immediately.
 func Middleware(ts *TokenService, guard *Guard) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -69,10 +67,6 @@ func RequireRole(roles ...models.Role) func(http.Handler) http.Handler {
 	}
 }
 
-// RequirePermission gates a route by one or more fine-grained permission
-// codes (e.g. "files.delete"), resolved from the RBAC tables at login time
-// and embedded in the access token. The request is allowed through if the
-// caller holds AT LEAST ONE of the given codes.
 func RequirePermission(codes ...string) func(http.Handler) http.Handler {
 	allowed := make(map[string]bool, len(codes))
 	for _, c := range codes {
