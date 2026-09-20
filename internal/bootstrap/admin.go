@@ -1,4 +1,3 @@
-// Package bootstrap makes sure a usable first administrator exists.
 package bootstrap
 
 import (
@@ -15,8 +14,6 @@ import (
 	"github.com/amrrasi/fits/internal/repository"
 )
 
-// EnsureAdmin creates (or re-activates) an admin when NO active admin exists.
-// Password: ADMIN_PASSWORD from env, otherwise a random one printed ONCE to stderr (never logged to files).
 func EnsureAdmin(ctx context.Context, users *repository.UserRepository, rbac *repository.RBACRepository, email, password string) error {
 	n, err := users.CountActiveAdmins(ctx)
 	if err != nil {
