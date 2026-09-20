@@ -10,7 +10,7 @@ import (
 	"github.com/amrrasi/fits/internal/repository"
 )
 
-var ErrAccountInactive = errors.New("حساب کاربری غیرفعال یا حذف شده است")
+var ErrAccountInactive = errors.New("حساب کاربری توسط ادمین غیرفعال یا حذف شده است")
 
 type State struct {
 	User  *models.User
@@ -22,8 +22,6 @@ type guardEntry struct {
 	exp time.Time
 }
 
-// Guard re-checks (with a very short cache) that the token's user still exists, is active,
-// and returns the CURRENT role/permissions - so revocations take effect immediately.
 type Guard struct {
 	users *repository.UserRepository
 	rbac  *repository.RBACRepository
